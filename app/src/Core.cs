@@ -285,7 +285,7 @@ namespace Pckit
     /// Anonymous usage report to the owner's server - only with the user's consent.
     public static class Telemetry
     {
-        public const string Base = "https://158-101-202-7.sslip.io";
+        public const string Base = "https://api.nolagi.dpdns.org";
         const string Url = Base + "/api/v1/report";
         public static string Key = "";
         public static Settings Cfg;
