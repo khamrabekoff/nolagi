@@ -69,6 +69,8 @@ function Read-PckitBenchLog {
         # игра держит файл открытым — читаем, не мешая ей писать
         $fs = [IO.File]::Open($Log, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
         if ($fs.Length -lt $Pos -or ($Pos -gt 0 -and $Sig -and (Get-PckitBenchSig -Fs $fs -Pos $Pos) -ne $Sig)) { $Pos = 0 }
+        # лог с -condebug может вырасти до сотен МБ: результат всегда в конце, читаем не больше 8 МБ
+        if ($fs.Length - $Pos -gt 8MB) { $Pos = $fs.Length - 8MB }
         $text = ''
         if ($fs.Length -gt $Pos) {
             [void]$fs.Seek($Pos, [IO.SeekOrigin]::Begin)
@@ -118,4 +120,39 @@ function Import-PckitCs2Bench {
         if ($locked) { $mutex.ReleaseMutex() }
         $mutex.Dispose()
     }
+}
+
+# история замеров: %LOCALAPPDATA%\pckit\fps\fps-<игра>-<время>.json
+function Get-PckitFpsDir {
+    $base = $env:LOCALAPPDATA
+    if (-not $base) { $base = Join-Path $env:USERPROFILE 'AppData\Local' }
+    $dir = Join-Path $base 'pckit\fps'
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    return $dir
+}
+
+function Save-PckitFpsRecord {
+    param($Record)
+    $file = Join-Path (Get-PckitFpsDir) ('fps-{0}-{1}.json' -f $Record.game, (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
+    [IO.File]::WriteAllText($file, ($Record | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+    return $Record
+}
+
+# последние замеры, новые сверху
+function Get-PckitFpsHistory {
+    # Game/Source фильтруют ДО ограничения Max: иначе прошлый замер другой игры вытесняет нужный
+    param([int]$Max = 20, [string]$Game = '', [string]$Source = '')
+    $rows = New-Object System.Collections.ArrayList
+    $files = @(Get-ChildItem -LiteralPath (Get-PckitFpsDir) -Filter 'fps-*.json' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    foreach ($f in $files) {
+        if ($rows.Count -ge $Max) { break }
+        try {
+            $r = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            if (-not ($r.game -and $r.avg)) { continue }   # старые замеры pckit («до»/«после») без поля game пропускаем
+            if ($Game -and [string]$r.game -ne $Game) { continue }
+            if ($Source -and [string]$r.source -ne $Source) { continue }
+            [void]$rows.Add($r)
+        } catch { }
+    }
+    return $rows.ToArray()
 }

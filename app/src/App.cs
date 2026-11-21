@@ -999,13 +999,10 @@ namespace Pckit
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            if (Busy || FpsBusy)
+            if (Busy)
             {
-                string q = Busy ? "Nolagi ещё работает. Закрыть всё равно?" : "Идёт замер FPS — он остановится. Закрыть всё равно?";
-                if (MessageBox.Show(this, q, "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;
+                if (MessageBox.Show(this, "Nolagi ещё работает. Закрыть всё равно?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;
             }
-            // флаг отмены — только когда окно точно закрывается: «Нет» не должно обрывать замер
-            if (!e.Cancel && FpsBusy) try { File.WriteAllText(CancelFlag, "cancel"); } catch { }
             base.OnClosing(e);
         }
 
