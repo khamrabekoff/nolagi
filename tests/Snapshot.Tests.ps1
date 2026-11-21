@@ -124,6 +124,35 @@ try {
     $r3 = Read-PckitBenchLog -Log $clog -Pos $r2.Pos -Sig $r2.Sig
     Check 'лог: перезапуск CS2 замечен' (@(ConvertFrom-PckitBenchText -Text $r3.Text).Count -eq 1) $r3.Pos
 
+    # 5д. большой лог: результат в середине, после него ещё много строк (матчи) — читается кусками, не теряется
+    $big = New-Object System.Text.StringBuilder
+    for ($k = 0; $k -lt 300; $k++) { [void]$big.Append("spam line $k`r`n") }
+    [void]$big.Append("[VProf] FPS: Avg=222.5, P1=111.5`r`n")
+    for ($k = 0; $k -lt 300; $k++) { [void]$big.Append("match spam $k`r`n") }
+    [void]$big.Append('недописано')
+    [IO.File]::WriteAllText($clog, $big.ToString(), $enc)
+    $len = (Get-Item -LiteralPath $clog).Length
+    $r4 = Read-PckitBenchLog -Log $clog -Pos 0 -Sig '' -ChunkSize 100
+    $b4 = @(ConvertFrom-PckitBenchText -Text $r4.Text)
+    Check 'большой лог: результат из середины найден' ($b4.Count -eq 1 -and $b4[0].Avg -eq 222.5) $r4.Text
+    Check 'большой лог: позиция — до недописанной строки' ($r4.Pos -eq ($len - $enc.GetByteCount('недописано'))) $r4.Pos
+    Check 'большой лог: в тексте только строки с Avg' (-not ($r4.Text -match 'spam')) $r4.Text.Length
+
+    # 5е. «прошлый» результат — замер до этого импорта, а не второй из только что забранных
+    $oldLocal = $env:LOCALAPPDATA
+    try {
+        $env:LOCALAPPDATA = Join-Path $tmp 'local'
+        foreach ($avg in 100, 200, 300) {
+            [void](Save-PckitFpsRecord -Record ([pscustomobject]@{ game = 'cs2'; source = 'bench'; at = (Get-Date).ToString('s'); avg = $avg; low1 = 50 }))
+            Start-Sleep -Milliseconds 30
+        }
+        $lt = Get-PckitBenchLatest -NewCount 2
+        Check 'бенчмарк: свежий — последний' ($lt.Latest.avg -eq 300) $lt.Latest.avg
+        Check 'бенчмарк: прошлый — до импорта' ($lt.Previous.avg -eq 100) $lt.Previous.avg
+        $l0 = Get-PckitBenchLatest -NewCount 0
+        Check 'бенчмарк: нового нет — ничего' ($null -eq $l0.Latest -and $null -eq $l0.Previous)
+    } finally { $env:LOCALAPPDATA = $oldLocal }
+
     # 6. выбор ассета
     $rel = '{"tag_name":"v2.3.1","assets":[
       {"name":"PresentMonCapture-2.3.1.msi","browser_download_url":"https://github.com/GameTechDev/PresentMon/releases/download/v2.3.1/PresentMonCapture-2.3.1.msi","size":100},

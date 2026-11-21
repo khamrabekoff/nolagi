@@ -288,8 +288,14 @@ namespace Pckit
         public const string Base = "https://api.nolagi.dpdns.org";
         // прежний адрес: сервер мог выдать ссылку на скачивание с него (его ещё слушают копии 1.0.0)
         public const string OldBase = "https://158-101-202-7.sslip.io";
-        const string Url = Base + "/api/v1/report";
         public static string Key = "";
+
+        // домен бесплатный: если он перестанет открываться, программа всё равно дойдёт до сервера по старому адресу
+        static T WithFallback<T>(Func<string, T> call)
+        {
+            try { return call(Base); }
+            catch (WebException) { return call(OldBase); }
+        }
         public static Settings Cfg;
         public static Dictionary<string, object> Hw;
 
@@ -306,7 +312,7 @@ namespace Pckit
             if (tweaks != null)
                 body["tweaks"] = tweaks.Select(t => (object)new Dictionary<string, object> { { "id", t.Key }, { "ok", t.Value } }).ToArray();
             string json = J.Write(body);
-            Task.Run(() => { try { Post(Url, json); } catch { } });
+            Task.Run(() => { try { WithFallback(b => Post(b + "/api/v1/report", json)); } catch { } });
         }
 
         static WebClient Client()
@@ -334,7 +340,7 @@ namespace Pckit
             if (Cfg == null || !Cfg.Consent || string.IsNullOrEmpty(Key) || string.IsNullOrEmpty(message)) return;
             string json = J.Write(new Dictionary<string, object> {
                 { "client_id", Cfg.Id }, { "version", App.Version }, { "where", where }, { "message", message.Length > 1900 ? message.Substring(0, 1900) : message } });
-            Task.Run(() => { try { Post(Base + "/api/v1/error", json); } catch { } });
+            Task.Run(() => { try { WithFallback(b => Post(b + "/api/v1/error", json)); } catch { } });
         }
 
         /// «Написать автору»: an explicit action of the user, so it is sent without the stats consent.
@@ -342,7 +348,7 @@ namespace Pckit
         {
             string json = J.Write(new Dictionary<string, object> {
                 { "client_id", Cfg.Id }, { "nick", Cfg.Nick }, { "version", App.Version }, { "text", text } });
-            return Task.Run(() => { Post(Base + "/api/v1/feedback", json); });
+            return Task.Run(() => { WithFallback(b => Post(b + "/api/v1/feedback", json)); });
         }
 
         /// New version + announcements. Sends only the version number.
@@ -352,8 +358,11 @@ namespace Pckit
             {
                 try
                 {
-                    using (var wc = Client())
-                        return J.Parse(wc.DownloadString(Base + "/api/v1/update?v=" + Uri.EscapeDataString(App.Version)));
+                    return WithFallback(b =>
+                    {
+                        using (var wc = Client())
+                            return J.Parse(wc.DownloadString(b + "/api/v1/update?v=" + Uri.EscapeDataString(App.Version)));
+                    });
                 }
                 catch { return null; }
             });

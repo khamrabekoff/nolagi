@@ -34,7 +34,7 @@ namespace Pckit
             if (FpsPageOpen) RenderFpsIdle();
         }
 
-        // новые результаты из ответа моста -> карточка результата; quiet = не ругаться, если нового нет
+        // новые результаты из ответа моста -> карточка результата; loud = показать ошибку, если нового нет или лог не прочитан
         void TakeBench(Dictionary<string, object> b, bool loud)
         {
             if (b == null) return;
@@ -100,7 +100,12 @@ namespace Pckit
                     on.Click += async (s, e) =>
                     {
                         on.IsEnabled = false;
-                        try { fpsStatus["bench"] = J.O(await Bridge.Run("bench-enable", null, null), "bench"); }
+                        try
+                        {
+                            var r = await Bridge.Run("bench-enable", null, null);
+                            fpsStatus["bench"] = J.O(r, "bench");
+                            if (J.S(r, "warn").Length > 0) fpsError = J.S(r, "warn");
+                        }
                         catch (Exception ex) { fpsError = "Не получилось: " + ex.Message; }
                         if (FpsPageOpen) RenderFpsIdle();
                     };
@@ -203,7 +208,8 @@ namespace Pckit
                     g.Children.Add(tb);
                 }
             };
-            addRow(0, new[] { "Когда", "Средний", "1% low" }, "Mut");
+            // дата — когда Nolagi забрал результат из консоли, а не когда пройдена карта (в логе CS2 нет времени)
+            addRow(0, new[] { "Забрано", "Средний", "1% low" }, "Mut");
             int row = 1;
             foreach (var h in hist.Take(10))
             {

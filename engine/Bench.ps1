@@ -57,43 +57,55 @@ function Save-PckitBenchState {
 function Reset-PckitCs2BenchState {
     $log = Get-PckitCs2ConsoleLog
     if (-not $log -or -not (Test-Path -LiteralPath $log)) { Save-PckitBenchState -Pos 0 -Sig ''; return }
-    $r = Read-PckitBenchLog -Log $log -Pos 0 -Sig ''
-    Save-PckitBenchState -Pos $r.Pos -Sig $r.Sig
+    try {
+        $r = Read-PckitBenchLog -Log $log -Pos 0 -Sig ''
+        Save-PckitBenchState -Pos $r.Pos -Sig $r.Sig
+    } catch {
+        # лог не прочитать (занят антивирусом и т. п.) — запомнить хотя бы его длину, иначе старый прогон станет «новым»
+        Save-PckitBenchState -Pos ((Get-Item -LiteralPath $log).Length) -Sig ''
+    }
 }
 
 # прочитать лог с позиции Pos до последнего перевода строки. Позиция — в байтах, без перекодирования.
+# Читаем кусками по 8 МБ и оставляем только строки с «Avg»: лог с -condebug может вырасти до сотен МБ,
+# а результат бенчмарка может оказаться где угодно (после пролёта игрок мог ещё сыграть матчи).
 function Read-PckitBenchLog {
-    param([string]$Log, [int64]$Pos, [string]$Sig)
+    param([string]$Log, [int64]$Pos, [string]$Sig, [int]$ChunkSize = 8MB)
     $fs = $null
     try {
         # игра держит файл открытым — читаем, не мешая ей писать
         $fs = [IO.File]::Open($Log, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
         if ($fs.Length -lt $Pos -or ($Pos -gt 0 -and $Sig -and (Get-PckitBenchSig -Fs $fs -Pos $Pos) -ne $Sig)) { $Pos = 0 }
-        # лог с -condebug может вырасти до сотен МБ: результат всегда в конце, читаем не больше 8 МБ
-        if ($fs.Length - $Pos -gt 8MB) { $Pos = $fs.Length - 8MB }
-        $text = ''
-        if ($fs.Length -gt $Pos) {
-            [void]$fs.Seek($Pos, [IO.SeekOrigin]::Begin)
-            $buf = New-Object byte[] ([int]($fs.Length - $Pos))
-            $n = $fs.Read($buf, 0, $buf.Length)
-            # недописанную последнюю строку оставляем на следующий раз
-            $cut = if ($n -gt 0) { [array]::LastIndexOf($buf, [byte]10, $n - 1) } else { -1 }
-            if ($cut -ge 0) {
-                $text = [Text.Encoding]::UTF8.GetString($buf, 0, $cut + 1)
-                $Pos += $cut + 1
+        $keep = New-Object System.Text.StringBuilder
+        [void]$fs.Seek($Pos, [IO.SeekOrigin]::Begin)
+        $buf = New-Object byte[] $ChunkSize
+        $carry = New-Object byte[] 0
+        while (($n = $fs.Read($buf, 0, $ChunkSize)) -gt 0) {
+            $data = New-Object byte[] ($carry.Length + $n)
+            [Array]::Copy($carry, 0, $data, 0, $carry.Length)
+            [Array]::Copy($buf, 0, $data, $carry.Length, $n)
+            $cut = [array]::LastIndexOf($data, [byte]10)
+            if ($cut -lt 0) { $carry = $data; continue }   # недописанную строку оставляем на следующий раз
+            foreach ($line in ([Text.Encoding]::UTF8.GetString($data, 0, $cut + 1)).Split("`n")) {
+                if ($line -match 'Avg') { [void]$keep.Append($line.TrimEnd("`r")).Append("`n") }
             }
+            $Pos += $cut + 1
+            $rest = $data.Length - $cut - 1
+            $carry = New-Object byte[] $rest
+            [Array]::Copy($data, $cut + 1, $carry, 0, $rest)
         }
-        return [pscustomobject]@{ Text = $text; Pos = $Pos; Sig = (Get-PckitBenchSig -Fs $fs -Pos $Pos) }
+        return [pscustomobject]@{ Text = $keep.ToString(); Pos = $Pos; Sig = (Get-PckitBenchSig -Fs $fs -Pos $Pos) }
     } finally { if ($fs) { $fs.Dispose() } }
 }
 
 # забрать новые результаты из console.log и сохранить в историю замеров. Возвращает новые записи.
-# Ошибка чтения (файл занят игрой) пробрасывается — окно скажет «закройте CS2».
+# Ошибка чтения пробрасывается — окно покажет её текст.
 function Import-PckitCs2Bench {
     $log = Get-PckitCs2ConsoleLog
     if (-not $log -or -not (Test-Path -LiteralPath $log)) { return @() }
-    # одновременно может работать несколько команд моста — импорт по очереди, иначе дубли
-    $mutex = New-Object System.Threading.Mutex($false, 'Global\NolagiBenchImport')
+    # одновременно может работать несколько команд моста — импорт по очереди, иначе дубли.
+    # Local\: все мосты в одной сессии, а Global\ без прав администратора создать нельзя
+    $mutex = New-Object System.Threading.Mutex($false, 'Local\NolagiBenchImport')
     $locked = $false
     try {
         try { $locked = $mutex.WaitOne(10000) } catch [System.Threading.AbandonedMutexException] { $locked = $true }
@@ -108,13 +120,18 @@ function Import-PckitCs2Bench {
         if (-not $state -and $found.Count -gt 1) { $found = @($found[$found.Count - 1]) }
 
         $new = New-Object System.Collections.ArrayList
+        $saveError = $null
         foreach ($f in $found) {
-            [void]$new.Add((Save-PckitFpsRecord -Record ([pscustomobject]@{
-                            game = 'cs2'; source = 'bench'; at = (Get-Date).ToString('s'); avg = $f.Avg; low1 = $f.P1
-                        })))
+            # ошибка записи одного результата не должна оставить позицию на месте — иначе при повторе дубли
+            try {
+                [void]$new.Add((Save-PckitFpsRecord -Record ([pscustomobject]@{
+                                game = 'cs2'; source = 'bench'; at = (Get-Date).ToString('s'); avg = $f.Avg; low1 = $f.P1
+                            })))
+            } catch { $saveError = $_.Exception.Message }
             Start-Sleep -Milliseconds 20   # разные имена файлов, если результатов несколько
         }
         Save-PckitBenchState -Pos $r.Pos -Sig $r.Sig
+        if ($saveError -and -not $new.Count) { throw ('не удалось сохранить результат: {0}' -f $saveError) }
         return $new.ToArray()
     } finally {
         if ($locked) { $mutex.ReleaseMutex() }
@@ -122,6 +139,18 @@ function Import-PckitCs2Bench {
     }
 }
 
+# что показать после импорта: самый свежий результат и «прошлый» — замер до этого импорта,
+# а не второй из только что забранных
+function Get-PckitBenchLatest {
+    param([int]$NewCount)
+    $hist = @(Get-PckitFpsHistory -Max ($NewCount + 1) -Game 'cs2' -Source 'bench')
+    $latest = $null; $prev = $null
+    if ($NewCount -gt 0 -and $hist.Count) {
+        $latest = $hist[0]
+        if ($hist.Count -gt $NewCount) { $prev = $hist[$NewCount] }
+    }
+    return [pscustomobject]@{ Latest = $latest; Previous = $prev }
+}
 # история замеров: %LOCALAPPDATA%\pckit\fps\fps-<игра>-<время>.json
 function Get-PckitFpsDir {
     $base = $env:LOCALAPPDATA

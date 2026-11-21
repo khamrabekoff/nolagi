@@ -54,16 +54,13 @@ try {
     function Get-BenchPayload {
         $new = @(); $readError = ''
         try { $new = @(Import-PckitCs2Bench) } catch { $readError = $_.Exception.Message }
-        # «прошлый» — замер до этого импорта, а не второй из только что забранных
-        $hist = @(Get-PckitFpsHistory -Max ($new.Count + 1) -Source 'bench')
-        $latest = $null; $prev = $null
-        if ($new.Count) { $latest = $hist[0]; if ($hist.Count -gt $new.Count) { $prev = $hist[$new.Count] } }
+        $last = Get-PckitBenchLatest -NewCount $new.Count
         return [pscustomobject]@{
             cs2       = [bool](Find-PckitCs2)
             condebug  = (Test-PckitCs2Condebug)
             newCount  = $new.Count
-            latest    = $latest
-            previous  = $prev
+            latest    = $last.Latest
+            previous  = $last.Previous
             readError = $readError
         }
     }
@@ -107,6 +104,12 @@ try {
                 })
         }
         return $rows.ToArray()
+    }
+
+    # команды, которые пишут журнал отката, — строго по одной: иначе две копии моста затрут записи друг друга
+    if ($Cmd -in 'apply', 'undo', 'undoall', 'startup-off', 'startup-on', 'bench-enable') {
+        $journalLock = New-Object System.Threading.Mutex($false, 'Local\NolagiJournal')
+        try { [void]$journalLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
     }
 
     switch ($Cmd) {
@@ -242,13 +245,17 @@ try {
             $res = Invoke-PckitActions -Actions $a -Run
             $fails = @(@(@($res.Results)[0].Results) | Where-Object { $_.Status -in 'fail', 'skip' })
             if ($fails.Count) { throw ([string]$fails[0].Message) }
-            # всё, что уже лежит в console.log, — старое: в историю попадут только следующие прогоны
-            try { Reset-PckitCs2BenchState } catch { }
-            Out-Msg @{ t = 'result'; bench = (Get-BenchPayload) }
+            # всё, что уже лежит в console.log, — старое: в историю попадут только следующие прогоны.
+            # Сам Reset при нечитаемом логе запоминает его длину; сюда долетает только ошибка записи состояния.
+            $warn = ''
+            try { Reset-PckitCs2BenchState } catch { $warn = ('Запись консоли включена, но не удалось запомнить конец console.log ({0}) — первый результат может оказаться старым.' -f $_.Exception.Message) }
+            Out-Msg @{ t = 'result'; bench = (Get-BenchPayload); warn = $warn }
         }
         default { throw "unknown command: $Cmd" }
     }
 } catch {
     Out-Msg @{ t = 'error'; msg = $_.Exception.Message }
     exit 1
+} finally {
+    if ($journalLock) { try { $journalLock.ReleaseMutex() } catch { }; $journalLock.Dispose() }
 }
