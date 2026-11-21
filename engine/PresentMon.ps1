@@ -244,6 +244,7 @@ function Save-PckitFpsResult {
     param([string]$Game, [int]$Seconds, $Stats)
     $rec = [pscustomobject]@{
         game     = $Game
+        source   = 'presentmon'
         at       = (Get-Date).ToString('s')
         seconds  = $Seconds
         avg      = $Stats.AvgFps
@@ -252,9 +253,14 @@ function Save-PckitFpsResult {
         frames   = $Stats.Frames
         duration = $Stats.DurationSec
     }
-    $file = Join-Path (Get-PckitFpsDir) ('fps-{0}-{1}.json' -f $Game, (Get-Date).ToString('yyyyMMdd-HHmmss'))
-    [IO.File]::WriteAllText($file, ($rec | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
-    return $rec
+    return (Save-PckitFpsRecord -Record $rec)
+}
+
+function Save-PckitFpsRecord {
+    param($Record)
+    $file = Join-Path (Get-PckitFpsDir) ('fps-{0}-{1}.json' -f $Record.game, (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
+    [IO.File]::WriteAllText($file, ($Record | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+    return $Record
 }
 
 # последние замеры, новые сверху

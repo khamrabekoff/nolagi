@@ -170,6 +170,36 @@
     ]
   },
   {
+    "id": "cs2.condebug",
+    "group": "CS2",
+    "title": "CS2: запись консоли для бенчмарка (-condebug)",
+    "what": "Добавляет в параметры запуска CS2 -condebug: игра пишет консоль в файл console.log.",
+    "effect": "Nolagi сам забирает результат карты «CS2 FPS Benchmark» — не нужно переписывать цифры из консоли. На FPS не влияет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "none",
+    "note": "Перед применением закройте Steam (значок у часов → Выход), иначе Steam затрёт изменения.",
+    "requires": {
+      "cs2": true
+    },
+    "steps": [
+      {
+        "type": "cs2launch",
+        "add": [
+          "-condebug"
+        ]
+      }
+    ],
+    "verify": [
+      {
+        "type": "cs2launch",
+        "add": [
+          "-condebug"
+        ]
+      }
+    ]
+  },
+  {
     "id": "nv.dota.power",
     "group": "Dota 2",
     "title": "NVIDIA: максимальная производительность для Dota 2",

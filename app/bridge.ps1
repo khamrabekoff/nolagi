@@ -50,6 +50,22 @@ try {
         }
     }
 
+    # бенчмарк CS2: включена ли запись консоли, новые результаты (забираются при каждом вызове) и прошлый результат
+    function Get-BenchPayload {
+        $new = @()
+        try { $new = @(Import-PckitCs2Bench) } catch { }
+        $hist = @(Get-PckitFpsHistory | Where-Object { $_.source -eq 'bench' })
+        $latest = $null; $prev = $null
+        if ($new.Count) { $latest = $hist[0]; if ($hist.Count -gt 1) { $prev = $hist[1] } }
+        return [pscustomobject]@{
+            cs2      = [bool](Find-PckitCs2)
+            condebug = (Test-PckitCs2Condebug)
+            newCount = $new.Count
+            latest   = $latest
+            previous = $prev
+        }
+    }
+
     # action ids that have journal entries: only these can be rolled back one by one
     function Get-UndoableIds {
         $j = Read-PckitJournal
@@ -218,7 +234,16 @@ try {
                 games      = @(Get-PckitFpsGames | ForEach-Object { [pscustomobject]@{ id = $_.Id; name = $_.Name; found = $_.Found; running = (Test-PckitProcessRunning $_.Exe) } })
                 history    = @(Get-PckitFpsHistory)
                 faceit     = [bool](@(Get-Process -Name 'FACEIT', 'faceitclient' -ErrorAction SilentlyContinue).Count)
+                bench      = (Get-BenchPayload)
             }
+        }
+        'bench-check' { Out-Msg @{ t = 'result'; bench = (Get-BenchPayload) } }
+        'bench-enable' {
+            $a = @(Get-PckitActions -Directory $dataDir | Where-Object { $_.id -eq 'cs2.condebug' })
+            $res = Invoke-PckitActions -Actions $a -Run
+            $fails = @(@(@($res.Results)[0].Results) | Where-Object { $_.Status -in 'fail', 'skip' })
+            if ($fails.Count) { throw ([string]$fails[0].Message) }
+            Out-Msg @{ t = 'result'; bench = (Get-BenchPayload) }
         }
         'fps-install' {
             Out-Msg @{ t = 'progress'; i = 0; n = 2; text = 'Узнаю последнюю версию PresentMon' }

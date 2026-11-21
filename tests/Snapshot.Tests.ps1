@@ -5,6 +5,7 @@ $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $root 'engine\Common.ps1')
 . (Join-Path $root 'engine\Snapshot.ps1')
 . (Join-Path $root 'engine\PresentMon.ps1')
+. (Join-Path $root 'engine\Bench.ps1')
 
 $script:fail = 0
 function Check {
@@ -113,6 +114,12 @@ try {
     Check 'живой CSV: без новых строк — пусто' (@($t3).Count -eq 0)
     $st = Get-PckitFpsStats -Times @(4.0, 5.0, 10.0)
     Check 'Get-PckitFpsStats: средний' (Near $st.AvgFps 157.9 0.1) $st.AvgFps
+
+    # 5в. результат бенчмарк-карты из консоли CS2
+    $b = @(ConvertFrom-PckitBenchText -Text "Loaded map`r`n[VProf] FPS: Avg=268.5, P1=148.2`r`nfoo`r`n[VProf] FPS: Avg=301, P1=160.75`r`n")
+    Check 'бенчмарк: два результата' ($b.Count -eq 2) $b.Count
+    Check 'бенчмарк: Avg и P1' ($b.Count -eq 2 -and $b[0].Avg -eq 268.5 -and $b[0].P1 -eq 148.2 -and $b[1].Avg -eq 301) (($b | ForEach-Object { '{0}/{1}' -f $_.Avg, $_.P1 }) -join ' ')
+    Check 'бенчмарк: в чужом тексте ничего' (@(ConvertFrom-PckitBenchText -Text 'fps_max 400').Count -eq 0)
 
     # 6. выбор ассета
     $rel = '{"tag_name":"v2.3.1","assets":[

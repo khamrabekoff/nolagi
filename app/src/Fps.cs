@@ -50,6 +50,16 @@ namespace Pckit
                 if (FpsPageOpen) SetPage(PageFrame("Замер FPS", "Ошибка: " + ex.Message, new Grid()));
                 return;
             }
+            // результат бенчмарка CS2 мог появиться, пока вкладка была закрыта
+            var bench = J.O(fpsStatus, "bench");
+            if (bench != null && J.N(bench, "newCount") > 0)
+            {
+                var res = new Dictionary<string, object>();
+                res["record"] = J.O(bench, "latest");
+                res["previous"] = J.O(bench, "previous");
+                res["gameName"] = "CS2 · бенчмарк";
+                fpsResult = res;
+            }
             if (FpsPageOpen && !FpsBusy) RenderFpsIdle();
         }
 
@@ -59,8 +69,9 @@ namespace Pckit
         {
             var sp = new StackPanel { MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
             var games = J.A(fpsStatus, "games");
-            var found = games.Where(x => J.B(x, "found")).ToList();
-            if (found.Count > 0 && !found.Any(x => J.S(x, "id") == fpsGame)) fpsGame = J.S(found[0], "id");
+            bool dota = games.Any(x => J.S(x, "id") == "dota" && J.B(x, "found"));
+            var bench = J.O(fpsStatus, "bench");
+            fpsGame = "dota";
 
             if (fpsError != null)
             {
@@ -69,59 +80,121 @@ namespace Pckit
             }
             if (fpsResult != null) sp.Children.Add(ResultCard(fpsResult));
 
-            var c = new StackPanel();
-            if (found.Count == 0)
+            // ---- CS2: карта «CS2 FPS Benchmark», результат забирается из консоли
+            if (bench != null && J.B(bench, "cs2")) sp.Children.Add(BenchCard(bench));
+
+            // ---- Dota 2: замер через PresentMon
+            if (dota)
             {
+                var c = new StackPanel();
+                c.Children.Add(T("Dota 2", 16, "Txt", FontWeights.SemiBold));
+                c.Children.Add(T("Длительность", 13, "Mut"));
+                ((TextBlock)c.Children[1]).Margin = new Thickness(0, 8, 0, 0);
+                var durRow = new WrapPanel { Margin = new Thickness(0, 6, 0, 14) };
+                foreach (int sec in new[] { 30, 60, 120 })
+                {
+                    int v = sec;
+                    var b = Btn(sec + " сек", sec == fpsSeconds ? "Primary" : "Btn");
+                    b.Margin = new Thickness(0, 0, 8, 0);
+                    b.Click += (s, e) => { fpsSeconds = v; RenderFpsIdle(); };
+                    durRow.Children.Add(b);
+                }
+                c.Children.Add(durRow);
+                var start = Btn("Начать замер", "Primary");
+                start.HorizontalAlignment = HorizontalAlignment.Left;
+                start.Click += (s, e) => StartFps();
+                c.Children.Add(start);
+                var how = T("Нажмите кнопку и зайдите в Dota 2 на карту — демо-режим героя или бот-матч. Как только игра запущена, через 5 секунд начнётся замер. " +
+                            "Повторяйте одну и ту же сцену, тогда «до» и «после» можно честно сравнить. FPS считает Intel PresentMon: он только читает события Windows о кадрах.", 13, "Mut");
+                how.Margin = new Thickness(0, 12, 0, 0);
+                c.Children.Add(how);
+                var card = Card(c);
+                card.Margin = new Thickness(0, 12, 0, 0);
+                sp.Children.Add(card);
+            }
+
+            if ((bench == null || !J.B(bench, "cs2")) && !dota)
+            {
+                var c = new StackPanel();
                 c.Children.Add(T("CS2 и Dota 2 не найдены в библиотеках Steam.", 15, "Txt", FontWeights.SemiBold));
-                c.Children.Add(T("Замер работает с этими играми. Если игра установлена — запустите её один раз через Steam и откройте вкладку снова.", 13.5, "Mut"));
+                c.Children.Add(T("Если игра установлена — запустите её один раз через Steam и откройте вкладку снова.", 13.5, "Mut"));
                 sp.Children.Add(Card(c));
-                SetPage(PageFrame("Замер FPS", "Средний FPS и 1% low в вашей игре — чтобы видеть, помогли ли настройки.", Scroll(sp)));
-                return;
             }
-
-            c.Children.Add(T("Игра", 13, "Mut"));
-            var gameRow = new WrapPanel { Margin = new Thickness(0, 6, 0, 14) };
-            foreach (var g in found)
-            {
-                string id = J.S(g, "id");
-                var b = Btn(J.S(g, "name") + (J.B(g, "running") ? "  · запущена" : ""), id == fpsGame ? "Primary" : "Btn");
-                b.Margin = new Thickness(0, 0, 8, 0);
-                b.Click += (s, e) => { fpsGame = id; RenderFpsIdle(); };
-                gameRow.Children.Add(b);
-            }
-            c.Children.Add(gameRow);
-
-            c.Children.Add(T("Длительность", 13, "Mut"));
-            var durRow = new WrapPanel { Margin = new Thickness(0, 6, 0, 14) };
-            foreach (int sec in new[] { 30, 60, 120 })
-            {
-                int v = sec;
-                var b = Btn(sec + " сек", sec == fpsSeconds ? "Primary" : "Btn");
-                b.Margin = new Thickness(0, 0, 8, 0);
-                b.Click += (s, e) => { fpsSeconds = v; RenderFpsIdle(); };
-                durRow.Children.Add(b);
-            }
-            c.Children.Add(durRow);
-
-            var start = Btn("Начать замер", "Primary");
-            start.HorizontalAlignment = HorizontalAlignment.Left;
-            start.Padding = new Thickness(22, 10, 22, 10);
-            start.Click += (s, e) => StartFps();
-            c.Children.Add(start);
-            c.Children.Add(T("Как это работает: нажмите кнопку, запустите игру (если ещё не запущена) и зайдите на карту — бот-матч, практика или демка. " +
-                             "Через 5 секунд начнётся замер. Повторяйте одну и ту же сцену, тогда «до» и «после» можно честно сравнить.", 13, "Mut"));
-            ((TextBlock)c.Children[c.Children.Count - 1]).Margin = new Thickness(0, 12, 0, 0);
-            sp.Children.Add(Card(c));
-
-            if (J.B(fpsStatus, "faceit"))
-                sp.Children.Add(Note("Запущен клиент FACEIT. Не меряйте во время матча FACEIT — только практика, боты или демка.", "Warn", "WarnSoft"));
 
             var hist = J.A(fpsStatus, "history");
             if (hist.Count > 0) sp.Children.Add(HistoryCard(hist));
+            SetPage(PageFrame("Замер FPS", "Средний FPS и 1% low — чтобы видеть, помогли ли настройки.", Scroll(sp)));
+        }
 
-            sp.Children.Add(T("FPS считает Intel PresentMon: он только читает события Windows о кадрах, в игру ничего не внедряет. Замер идёт в фоне — можно пользоваться программой.", 12.5, "Mut"));
-            ((TextBlock)sp.Children[sp.Children.Count - 1]).Margin = new Thickness(4, 12, 0, 0);
-            SetPage(PageFrame("Замер FPS", "Средний FPS и 1% low в вашей игре — чтобы видеть, помогли ли настройки.", Scroll(sp)));
+        Border BenchCard(Dictionary<string, object> bench)
+        {
+            var c = new StackPanel();
+            c.Children.Add(T("CS2 · карта «CS2 FPS Benchmark»", 16, "Txt", FontWeights.SemiBold));
+            object cd = J.Get(bench, "condebug");
+            if (!(cd is bool) || !(bool)cd)
+            {
+                var t = T(cd == null
+                    ? "Сначала запустите CS2 хотя бы раз через Steam — тогда Nolagi сможет включить запись консоли."
+                    : "Чтобы Nolagi сам забирал результат, включите запись консоли CS2 (параметр запуска -condebug, на FPS не влияет). Перед этим закройте Steam: значок у часов → Выход.", 13.5, "Mut");
+                t.Margin = new Thickness(0, 6, 0, 12);
+                c.Children.Add(t);
+                if (cd != null)
+                {
+                    var on = Btn("Включить запись консоли", "Primary");
+                    on.HorizontalAlignment = HorizontalAlignment.Left;
+                    on.Click += async (s, e) =>
+                    {
+                        on.IsEnabled = false;
+                        try { fpsStatus["bench"] = J.O(await Bridge.Run("bench-enable", null, null), "bench"); }
+                        catch (Exception ex) { fpsError = "Не получилось: " + ex.Message; }
+                        if (FpsPageOpen) RenderFpsIdle();
+                    };
+                    c.Children.Add(on);
+                }
+            }
+            else
+            {
+                string[] steps =
+                {
+                    "1.  Подпишитесь на карту «CS2 FPS Benchmark» в Мастерской Steam (один раз).",
+                    "2.  В CS2: Играть → Мастерская → CS2 FPS Benchmark, дождитесь конца пролёта.",
+                    "3.  Вернитесь в Nolagi и нажмите «Забрать результат» — средний FPS и 1% low появятся здесь."
+                };
+                var list = new StackPanel { Margin = new Thickness(0, 8, 0, 12) };
+                foreach (var st in steps) { var tb = T(st, 13.5, "Txt"); tb.Margin = new Thickness(0, 2, 0, 2); list.Children.Add(tb); }
+                c.Children.Add(list);
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                var take = Btn("Забрать результат", "Primary");
+                var shop = Btn("Открыть Мастерскую");
+                shop.Margin = new Thickness(8, 0, 0, 0);
+                take.Click += async (s, e) =>
+                {
+                    take.IsEnabled = false;
+                    Dictionary<string, object> b = null;
+                    try { b = J.O(await Bridge.Run("bench-check", null, null), "bench"); }
+                    catch (Exception ex) { fpsError = "Не получилось прочитать консоль CS2: " + ex.Message; }
+                    if (b != null)
+                    {
+                        if (J.N(b, "newCount") > 0)
+                        {
+                            var res = new Dictionary<string, object>();
+                            res["record"] = J.O(b, "latest");
+                            res["previous"] = J.O(b, "previous");
+                            res["gameName"] = "CS2 · бенчмарк";
+                            fpsResult = res;
+                        }
+                        else fpsError = "Нового результата нет. Пройдите карту до конца пролёта и нажмите ещё раз. Если CS2 запускалась до включения записи консоли — перезапустите игру.";
+                    }
+                    if (FpsPageOpen) ShowFps();   // заново: история и результат
+                };
+                shop.Click += (s, e) =>
+                {
+                    try { System.Diagnostics.Process.Start("https://steamcommunity.com/workshop/browse/?appid=730&searchtext=CS2+FPS+Benchmark"); } catch { }
+                };
+                row.Children.Add(take); row.Children.Add(shop);
+                c.Children.Add(row);
+            }
+            return Card(c);
         }
 
         void StartFps()
@@ -346,7 +419,7 @@ namespace Pckit
             var nums = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
             nums.Children.Add(Metric("Средний FPS", J.N(rec, "avg"), prev == null ? (double?)null : J.N(prev, "avg")));
             nums.Children.Add(Metric("1% low", J.N(rec, "low1"), prev == null ? (double?)null : J.N(prev, "low1")));
-            nums.Children.Add(Metric("0.1% low", J.N(rec, "low01"), prev == null ? (double?)null : J.N(prev, "low01")));
+            if (J.N(rec, "low01") > 0) nums.Children.Add(Metric("0.1% low", J.N(rec, "low01"), prev == null ? (double?)null : J.N(prev, "low01")));
             c.Children.Add(nums);
 
             double avg = J.N(rec, "avg"), low = J.N(rec, "low1");
@@ -407,10 +480,10 @@ namespace Pckit
                 addRow(row++, new[]
                 {
                     When(J.S(h, "at")),
-                    J.S(h, "game") == "dota" ? "Dota 2" : "CS2",
+                    J.S(h, "game") == "dota" ? "Dota 2" : (J.S(h, "source") == "bench" ? "CS2 · бенчмарк" : "CS2"),
                     J.N(h, "avg").ToString("0", CultureInfo.InvariantCulture),
                     J.N(h, "low1").ToString("0", CultureInfo.InvariantCulture),
-                    J.N(h, "seconds").ToString("0", CultureInfo.InvariantCulture)
+                    J.N(h, "seconds") > 0 ? J.N(h, "seconds").ToString("0", CultureInfo.InvariantCulture) : "—"
                 }, "Txt");
             }
             c.Children.Add(g);
