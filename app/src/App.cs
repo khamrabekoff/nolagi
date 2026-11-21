@@ -67,7 +67,7 @@ namespace Pckit
         public List<ActionItem> Items = new List<ActionItem>();
     }
 
-    public class MainWindow : Window
+    public partial class MainWindow : Window
     {
         Grid root;
         Grid scanScreen, shell, overlay;
@@ -306,8 +306,9 @@ namespace Pckit
             navClean = NavItem("", "Чистка", ShowClean);
             navStart = NavItem("", "Автозагрузка", ShowStartup);
             navUndo = NavItem("", "Откат", ShowUndo);
+            navFps = NavItem("\uE916", "Замер FPS", ShowFps);
             navFeedback = NavItem("", "Написать автору", ShowFeedback);
-            foreach (var n in new[] { navPc, navSet, navClean, navStart, navUndo }) nav.Children.Add(n);
+            foreach (var n in new[] { navPc, navSet, navFps, navClean, navStart, navUndo }) nav.Children.Add(n);
             nav.Children.Add(new Border { Height = 1, Background = Res("Line"), Margin = new Thickness(12, 10, 12, 10) });
             nav.Children.Add(navFeedback);
             shell.Children.Add(nav);
@@ -998,6 +999,7 @@ namespace Pckit
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            if (FpsBusy) try { File.WriteAllText(CancelFlag, "cancel"); } catch { }   // не оставлять замер в фоне
             if (Busy)
             {
                 if (MessageBox.Show(this, "Nolagi ещё работает. Закрыть всё равно?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;

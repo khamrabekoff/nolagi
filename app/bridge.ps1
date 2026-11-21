@@ -211,6 +211,84 @@ try {
             if (-not (Test-PckitJournalEmpty -Journal $journal)) { [void](Save-PckitJournal -Journal $journal) }
             Out-Msg @{ t = 'result'; ok = $ok; failed = $failed }
         }
+        'fps-status' {
+            Out-Msg @{
+                t          = 'result'
+                presentMon = [bool](Find-PckitPresentMon)
+                games      = @(Get-PckitFpsGames | ForEach-Object { [pscustomobject]@{ id = $_.Id; name = $_.Name; found = $_.Found; running = (Test-PckitProcessRunning $_.Exe) } })
+                history    = @(Get-PckitFpsHistory)
+                faceit     = [bool](@(Get-Process -Name 'FACEIT', 'faceitclient' -ErrorAction SilentlyContinue).Count)
+            }
+        }
+        'fps-install' {
+            Out-Msg @{ t = 'progress'; i = 0; n = 2; text = 'Узнаю последнюю версию PresentMon' }
+            $rel = Get-PckitPresentMonRelease
+            Out-Msg @{ t = 'progress'; i = 1; n = 2; text = ('Скачиваю {0} и проверяю подпись Intel' -f $rel.Name) }
+            $exe = Install-PckitPresentMon -Url $rel.Url -Name $rel.Name
+            Out-Msg @{ t = 'result'; ok = $true; version = [string]$rel.Version; path = [string]$exe }
+        }
+        'fps-measure' {
+            # ids: [игра, секунды]. Окно отменяет замер файлом fps-cancel.flag рядом с движком.
+            $want = Get-IdList
+            $game = @(Get-PckitFpsGames | Where-Object { $_.Id -eq $want[0] })[0]
+            if (-not $game) { throw 'неизвестная игра' }
+            $seconds = 60
+            if ($want.Count -gt 1) { $seconds = [math]::Max(10, [math]::Min(300, [int]$want[1])) }
+            $pm = Find-PckitPresentMon
+            if (-not $pm) { throw 'PresentMon не установлен' }
+            $cancelFlag = Join-Path $Root 'fps-cancel.flag'
+            Remove-Item -LiteralPath $cancelFlag -Force -ErrorAction SilentlyContinue
+            $cancelled = { Test-Path -LiteralPath $cancelFlag }
+
+            # 1) ждём игру (до 10 минут)
+            $waited = 0
+            while (-not (Test-PckitProcessRunning $game.Exe)) {
+                if (& $cancelled) { Out-Msg @{ t = 'result'; cancelled = $true }; return }
+                if ($waited -ge 600) { throw ('{0} так и не запустилась за 10 минут' -f $game.Name) }
+                Out-Msg @{ t = 'progress'; phase = 'wait'; i = $waited; n = 600; text = ('Жду запуска {0}' -f $game.Name) }
+                Start-Sleep -Seconds 1; $waited++
+            }
+            # 2) пять секунд, чтобы переключиться в игру
+            for ($c = 5; $c -ge 1; $c--) {
+                if (& $cancelled) { Out-Msg @{ t = 'result'; cancelled = $true }; return }
+                Out-Msg @{ t = 'progress'; phase = 'countdown'; i = 5 - $c; n = 5; left = $c; text = 'Переключитесь в игру' }
+                Start-Sleep -Seconds 1
+            }
+            # 3) замер: каждую секунду — живой FPS
+            $csv = Join-Path (Get-PckitFpsDir) ('capture-{0}.csv' -f $game.Id)
+            $proc = Start-PckitFpsCapture -Exe $pm -ProcessName $game.Exe -Seconds $seconds -OutCsv $csv
+            $tail = New-PckitFpsTail -Path $csv
+            $all = New-Object 'System.Collections.Generic.List[double]'
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            try {
+                while (-not $proc.HasExited) {
+                    Start-Sleep -Milliseconds 1000
+                    if (& $cancelled) {
+                        try { $proc.Kill() } catch { }
+                        Out-Msg @{ t = 'result'; cancelled = $true }; return
+                    }
+                    $new = Read-PckitFpsTail -Tail $tail
+                    foreach ($x in $new) { $all.Add($x) }
+                    $fps = 0
+                    if ($new.Count) { $sum = 0.0; foreach ($x in $new) { $sum += $x }; if ($sum -gt 0) { $fps = [math]::Round(1000.0 * $new.Count / $sum) } }
+                    $el = [math]::Min($seconds, [int]$sw.Elapsed.TotalSeconds)
+                    Out-Msg @{ t = 'progress'; phase = 'run'; i = $el; n = $seconds; fps = $fps; text = 'Идёт замер' }
+                    if ($sw.Elapsed.TotalSeconds -gt $seconds + 30) { try { $proc.Kill() } catch { }; break }   # PresentMon завис
+                }
+                foreach ($x in (Read-PckitFpsTail -Tail $tail)) { $all.Add($x) }
+            } finally {
+                if (-not $proc.HasExited) { try { $proc.Kill() } catch { } }
+                Remove-Item -LiteralPath $csv -Force -ErrorAction SilentlyContinue
+            }
+            if ($all.Count -lt 100) {
+                if (-not (Test-PckitProcessRunning $game.Exe)) { throw ('{0} закрылась во время замера' -f $game.Name) }
+                throw 'слишком мало кадров — игра была свёрнута или на паузе?'
+            }
+            $stats = Get-PckitFpsStats -Times $all.ToArray()
+            $prev = @(Get-PckitFpsHistory | Where-Object { $_.game -eq $game.Id })[0]
+            $rec = Save-PckitFpsResult -Game $game.Id -Seconds $seconds -Stats $stats
+            Out-Msg @{ t = 'result'; record = $rec; previous = $prev; gameName = $game.Name }
+        }
         default { throw "unknown command: $Cmd" }
     }
 } catch {

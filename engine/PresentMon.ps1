@@ -132,18 +132,142 @@ function Read-PckitFpsCsv {
         }
     } finally { $reader.Dispose() }
 
-    if (-not $times.Count) { throw 'в CSV нет кадров' }
+    return (Get-PckitFpsStats -Times $times.ToArray())
+}
+
+# средний FPS, 1% и 0.1% low по времени кадров (мс)
+function Get-PckitFpsStats {
+    param([double[]]$Times)
+    if (-not $Times -or -not $Times.Count) { throw 'нет кадров' }
     $sum = 0.0
-    foreach ($t in $times) { $sum += $t }
-    $desc = [double[]]($times.ToArray() | Sort-Object -Descending)
+    foreach ($t in $Times) { $sum += $t }
+    $desc = [double[]]($Times | Sort-Object -Descending)
     $p99 = Get-PckitSlowestFrame $desc 0.01
     $p999 = Get-PckitSlowestFrame $desc 0.001
     return [pscustomobject]@{
-        Frames      = $times.Count
-        AvgFps      = [math]::Round(1000.0 * $times.Count / $sum, 2)
+        Frames      = $Times.Count
+        AvgFps      = [math]::Round(1000.0 * $Times.Count / $sum, 2)
         Low1Fps     = [math]::Round(1000.0 / $p99, 2)
         Low01Fps    = [math]::Round(1000.0 / $p999, 2)
         P99FrameMs  = [math]::Round($p99, 3)
         DurationSec = [math]::Round($sum / 1000.0, 1)
     }
+}
+
+# ---------- замер для Nolagi.exe: в фоне, с живым FPS и отменой ----------
+
+# игры, которые умеем мерить
+function Get-PckitFpsGames {
+    $hw = $null
+    try { $hw = Get-PckitHardwareProfile } catch { }
+    return @(
+        [pscustomobject]@{ Id = 'cs2'; Name = 'CS2'; Exe = 'cs2.exe'; Found = [bool]($hw -and $hw.Cs2Path) }
+        [pscustomobject]@{ Id = 'dota'; Name = 'Dota 2'; Exe = 'dota2.exe'; Found = [bool]($hw -and $hw.DotaPath) }
+    )
+}
+
+function Test-PckitProcessRunning {
+    param([string]$Exe)
+    return [bool](@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($Exe)) -ErrorAction SilentlyContinue).Count)
+}
+
+# запуск PresentMon без ожидания: замер идёт сам, программа в это время свободна
+function Start-PckitFpsCapture {
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [Parameter(Mandatory)][string]$ProcessName,
+        [int]$Seconds = 60,
+        [Parameter(Mandatory)][string]$OutCsv
+    )
+    $dir = Split-Path -Parent $OutCsv
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    if (Test-Path -LiteralPath $OutCsv) { Remove-Item -LiteralPath $OutCsv -Force }
+    # --terminate_on_proc_exit: игру закрыли — замер заканчивается сам, ничего не висит в фоне
+    $argLine = '--process_name {0} --output_file "{1}" --timed {2} --terminate_after_timed --terminate_on_proc_exit --stop_existing_session --no_console_stats' -f $ProcessName, $OutCsv, $Seconds
+    return (Start-Process -FilePath $Exe -ArgumentList $argLine -WindowStyle Hidden -PassThru)
+}
+
+# чтение CSV, который PresentMon ещё дописывает: каждый вызов возвращает только новые кадры
+function New-PckitFpsTail {
+    param([string]$Path)
+    return @{ Path = $Path; Pos = 0L; Idx = -1; Partial = '' }
+}
+
+function Read-PckitFpsTail {
+    param($Tail)
+    $out = New-Object 'System.Collections.Generic.List[double]'
+    if (-not (Test-Path -LiteralPath $Tail.Path)) { return , $out.ToArray() }
+    $fs = $null
+    try {
+        $fs = [IO.File]::Open($Tail.Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+        if ($fs.Length -le $Tail.Pos) { return , $out.ToArray() }
+        [void]$fs.Seek($Tail.Pos, [IO.SeekOrigin]::Begin)
+        $buf = New-Object byte[] ([int]($fs.Length - $Tail.Pos))
+        $n = $fs.Read($buf, 0, $buf.Length)
+        $Tail.Pos += $n
+        $text = $Tail.Partial + [Text.Encoding]::UTF8.GetString($buf, 0, $n)
+    } catch { return , $out.ToArray() } finally { if ($fs) { $fs.Dispose() } }
+
+    $lines = $text.Split("`n")
+    $Tail.Partial = $lines[$lines.Length - 1]   # строка может быть недописана
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    for ($k = 0; $k -lt $lines.Length - 1; $k++) {
+        $line = $lines[$k].TrimEnd("`r")
+        if (-not $line) { continue }
+        if ($Tail.Idx -lt 0) {
+            $cols = @($line.TrimStart([char]0xFEFF).Split(',') | ForEach-Object { $_.Trim().Trim('"') })
+            foreach ($name in 'FrameTime', 'MsBetweenPresents') {
+                $Tail.Idx = [array]::IndexOf($cols, $name)
+                if ($Tail.Idx -ge 0) { break }
+            }
+            if ($Tail.Idx -lt 0) { throw 'в CSV нет колонки FrameTime или MsBetweenPresents' }
+            continue
+        }
+        $parts = $line.Split(',')
+        if ($parts.Length -le $Tail.Idx) { continue }
+        $v = 0.0
+        if ([double]::TryParse($parts[$Tail.Idx].Trim('"'), [Globalization.NumberStyles]::Float, $inv, [ref]$v) -and $v -gt 0) { $out.Add($v) }
+    }
+    return , $out.ToArray()
+}
+
+# история замеров: %LOCALAPPDATA%\pckit\fps\fps-<игра>-<время>.json
+function Get-PckitFpsDir {
+    $base = $env:LOCALAPPDATA
+    if (-not $base) { $base = Join-Path $env:USERPROFILE 'AppData\Local' }
+    $dir = Join-Path $base 'pckit\fps'
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    return $dir
+}
+
+function Save-PckitFpsResult {
+    param([string]$Game, [int]$Seconds, $Stats)
+    $rec = [pscustomobject]@{
+        game     = $Game
+        at       = (Get-Date).ToString('s')
+        seconds  = $Seconds
+        avg      = $Stats.AvgFps
+        low1     = $Stats.Low1Fps
+        low01    = $Stats.Low01Fps
+        frames   = $Stats.Frames
+        duration = $Stats.DurationSec
+    }
+    $file = Join-Path (Get-PckitFpsDir) ('fps-{0}-{1}.json' -f $Game, (Get-Date).ToString('yyyyMMdd-HHmmss'))
+    [IO.File]::WriteAllText($file, ($rec | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+    return $rec
+}
+
+# последние замеры, новые сверху
+function Get-PckitFpsHistory {
+    param([int]$Max = 20)
+    $rows = New-Object System.Collections.ArrayList
+    $files = @(Get-ChildItem -LiteralPath (Get-PckitFpsDir) -Filter 'fps-*.json' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    foreach ($f in $files) {
+        if ($rows.Count -ge $Max) { break }
+        try {
+            $r = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($r.game -and $r.avg) { [void]$rows.Add($r) }   # старые замеры pckit («до»/«после») без поля game пропускаем
+        } catch { }
+    }
+    return $rows.ToArray()
 }

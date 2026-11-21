@@ -100,6 +100,20 @@ try {
         Check "CSV $col : длительность 4,16 с" (Near $r.DurationSec 4.2 0.1) $r.DurationSec
     }
 
+    # 5б. живой замер: CSV дописывается по кускам, недописанная строка ждёт следующего чтения
+    $live = Join-Path $tmp 'fps-live.csv'
+    [IO.File]::WriteAllText($live, "Application,FrameTime`r`ncs2.exe,4.000`r`ncs2.exe,5.0")
+    $tail = New-PckitFpsTail -Path $live
+    $t1 = Read-PckitFpsTail -Tail $tail
+    [IO.File]::AppendAllText($live, "00`r`ncs2.exe,10.000`r`n")
+    $t2 = Read-PckitFpsTail -Tail $tail
+    $t3 = Read-PckitFpsTail -Tail $tail
+    Check 'живой CSV: первое чтение — 1 кадр' (@($t1).Count -eq 1 -and $t1[0] -eq 4) (@($t1) -join ',')
+    Check 'живой CSV: дочитал строку и новую' (@($t2).Count -eq 2 -and $t2[0] -eq 5 -and $t2[1] -eq 10) (@($t2) -join ',')
+    Check 'живой CSV: без новых строк — пусто' (@($t3).Count -eq 0)
+    $st = Get-PckitFpsStats -Times @(4.0, 5.0, 10.0)
+    Check 'Get-PckitFpsStats: средний' (Near $st.AvgFps 157.9 0.1) $st.AvgFps
+
     # 6. выбор ассета
     $rel = '{"tag_name":"v2.3.1","assets":[
       {"name":"PresentMonCapture-2.3.1.msi","browser_download_url":"https://github.com/GameTechDev/PresentMon/releases/download/v2.3.1/PresentMonCapture-2.3.1.msi","size":100},
