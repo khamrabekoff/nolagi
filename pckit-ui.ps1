@@ -3771,6 +3771,7 @@ $cleanRunButton.Add_Click({
 
 $tabs.Add_SelectedIndexChanged({
         if ($tabs.SelectedTab -eq $tabClean -and -not $script:CleanCounted) { Count-CleanSizes }
+        if ($tabs.SelectedTab -eq $tabManual -and $manualList.Items.Count -eq 0) { Fill-ManualList }
     })
 
 $healthCheckButton.Add_Click({ Run-HealthCheck })

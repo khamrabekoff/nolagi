@@ -1214,6 +1214,88 @@
     ]
   },
   {
+    "id": "svc.manual",
+    "group": "Службы и задачи",
+    "title": "Лишние службы — запуск по требованию",
+    "what": "Переводит в ручной запуск службы, которые Windows стартует при каждой загрузке, хотя игре и FACEIT они не нужны: фоновая передача BITS, диагностика, учёт трафика, офлайн-карты, отслеживание ярлыков, IPv6-туннели, обнаружение устройств в сети, удалённый реестр, факс, биометрия, демо-режим, Windows Insider. Steam, FACEIT, NVIDIA, звук, сеть и Защитник не трогаем.",
+    "effect": "Меньше процессов и пробуждений в фоне во время игры — ровнее 1% low. Служба запустится сама, если понадобится.",
+    "effectLevel": "средний",
+    "risk": "low",
+    "needs": "admin",
+    "steps": [
+      { "type": "service", "name": "BITS", "startType": "Manual" },
+      { "type": "service", "name": "DPS", "startType": "Manual" },
+      { "type": "service", "name": "WdiServiceHost", "startType": "Manual" },
+      { "type": "service", "name": "WdiSystemHost", "startType": "Manual" },
+      { "type": "service", "name": "DusmSvc", "startType": "Manual" },
+      { "type": "service", "name": "MapsBroker", "startType": "Manual" },
+      { "type": "service", "name": "TrkWks", "startType": "Manual" },
+      { "type": "service", "name": "iphlpsvc", "startType": "Manual" },
+      { "type": "service", "name": "SSDPSRV", "startType": "Manual" },
+      { "type": "service", "name": "FDResPub", "startType": "Manual" },
+      { "type": "service", "name": "fdPHost", "startType": "Manual" },
+      { "type": "service", "name": "WbioSrvc", "startType": "Manual" },
+      { "type": "service", "name": "wisvc", "startType": "Manual" },
+      { "type": "service", "name": "Fax", "startType": "Manual" },
+      { "type": "service", "name": "RetailDemo", "startType": "Manual" },
+      { "type": "service", "name": "RemoteRegistry", "startType": "Disabled", "stop": true }
+    ],
+    "verify": [
+      { "type": "service", "name": "DusmSvc", "startType": "Manual" },
+      { "type": "service", "name": "MapsBroker", "startType": "Manual" }
+    ]
+  },
+  {
+    "id": "consumer.features.off",
+    "group": "Фон",
+    "title": "Windows не ставит рекламные приложения сама",
+    "what": "Политика DisableWindowsConsumerFeatures: Windows перестаёт сама скачивать игры и приложения-«рекомендации» (Candy Crush и т. п.) в меню «Пуск».",
+    "effect": "Меньше фоновых загрузок и установок, в том числе во время игры.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "name": "DisableWindowsConsumerFeatures", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "name": "DisableWindowsConsumerFeatures", "value": 1 }
+    ]
+  },
+  {
+    "id": "location.off",
+    "group": "Конфиденциальность",
+    "title": "Отключить отслеживание местоположения",
+    "what": "Запрещает приложениям доступ к местоположению и выключает службу геолокации в настройках.",
+    "effect": "На fps не влияет, меньше фоновых запросов. Погода и карты не будут знать, где вы.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location", "name": "Value", "value": "Deny", "valueType": "String" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Sensor\\Overrides\\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}", "name": "SensorPermissionState", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SYSTEM\\Maps", "name": "AutoUpdateEnabled", "value": 0, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location", "name": "Value", "value": "Deny" }
+    ]
+  },
+  {
+    "id": "wpbt.off",
+    "group": "Конфиденциальность",
+    "title": "Запретить прошивке ставить программы (WPBT)",
+    "what": "Windows перестаёт запускать программы, которые производитель материнской платы «зашил» в BIOS (WPBT) и которые сами ставятся после каждой переустановки Windows (например, Armoury Crate, утилиты Lenovo).",
+    "effect": "На fps напрямую не влияет; убирает навязанный софт от производителя, который потом висит в фоне.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager", "name": "DisableWpbtExecution", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager", "name": "DisableWpbtExecution", "value": 1 }
+    ]
+  },
+  {
     "id": "browsers.background.off",
     "group": "Фон",
     "title": "Chrome и Brave не работают в фоне",

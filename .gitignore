@@ -7,3 +7,6 @@ tests/sandbox/out/
 
 # снимки настроек ПК (pckit-diff)
 snapshots/
+
+app/obj/
+app/obj-dev/
