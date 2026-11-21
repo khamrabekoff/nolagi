@@ -301,6 +301,12 @@ function Get-PckitHealthReport {
                     -Detail 'Искал в библиотеках Steam. Если игра установлена — проверьте путь Steam.'))
     }
 
+    # ---- Dota 2: только если установлена — не у всех она есть, «не найдена» не шумим
+    $dota = Find-PckitDota2
+    if ($dota) {
+        [void]$findings.Add((New-PckitFinding -Severity 'ok' -Title 'Dota 2 найдена' -Detail $dota))
+    }
+
     # ---- Журнал (что уже сделано программой)
     $journal = Read-PckitJournal
     $journalCount = Get-PckitJournalCount -Journal $journal

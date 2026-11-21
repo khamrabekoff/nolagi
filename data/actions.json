@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": "power.plan",
     "skipIf": { "laptop": true }, "skipWhy": "ноутбук: включайте, только когда играете от сети — от батареи она сядет быстрее",
@@ -167,6 +167,195 @@
     ],
     "verify": [
       { "type": "cs2launch", "add": [ "+exec autoexec" ] }
+    ]
+  },
+  {
+    "id": "cs2.condebug",
+    "group": "CS2",
+    "title": "CS2: запись консоли для бенчмарка (-condebug)",
+    "what": "Добавляет в параметры запуска CS2 -condebug: игра пишет консоль в файл console.log.",
+    "effect": "Nolagi сам забирает результат карты «CS2 FPS Benchmark» — не нужно переписывать цифры из консоли. На FPS не влияет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "none",
+    "note": "Перед применением закройте Steam (значок у часов → Выход), иначе Steam затрёт изменения.",
+    "requires": {
+      "cs2": true
+    },
+    "steps": [
+      {
+        "type": "cs2launch",
+        "add": [
+          "-condebug"
+        ]
+      }
+    ],
+    "verify": [
+      {
+        "type": "cs2launch",
+        "add": [
+          "-condebug"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "nv.dota.power",
+    "group": "Dota 2",
+    "title": "NVIDIA: максимальная производительность для Dota 2",
+    "what": "В профиле драйвера NVIDIA для dota2.exe видеокарта не сбрасывает частоты между кадрами.",
+    "effect": "Меньше просадок в больших драках, когда нагрузка резко скачет. Действует только пока запущена Dota 2.",
+    "effectLevel": "средний",
+    "risk": "low",
+    "needs": "admin",
+    "requires": {
+      "gpu": "nvidia",
+      "dota": true
+    },
+    "steps": [
+      {
+        "type": "nvidia",
+        "exe": "dota2.exe",
+        "id": 274197361,
+        "value": 1,
+        "title": "режим управления питанием: максимальная производительность"
+      }
+    ],
+    "verify": [
+      {
+        "type": "nvidia",
+        "exe": "dota2.exe",
+        "id": 274197361,
+        "value": 1
+      }
+    ]
+  },
+  {
+    "id": "nv.dota.lowlatency",
+    "group": "Dota 2",
+    "title": "NVIDIA: режим низкой задержки для Dota 2",
+    "what": "Драйвер не копит кадры в очереди для dota2.exe.",
+    "effect": "Меньше задержка ввода, когда видеокарта загружена на 100%. Если в игре включён NVIDIA Reflex, он главнее — вреда от настройки нет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "requires": {
+      "gpu": "nvidia",
+      "dota": true
+    },
+    "steps": [
+      {
+        "type": "nvidia",
+        "exe": "dota2.exe",
+        "id": 8102046,
+        "value": 1,
+        "title": "режим низкой задержки: вкл."
+      }
+    ],
+    "verify": [
+      {
+        "type": "nvidia",
+        "exe": "dota2.exe",
+        "id": 8102046,
+        "value": 1
+      }
+    ]
+  },
+  {
+    "id": "gpu.dota.highperf",
+    "group": "Dota 2",
+    "title": "Dota 2 всегда на мощной видеокарте",
+    "what": "Windows запускает dota2.exe на дискретной видеокарте («Высокая производительность» в настройках графики).",
+    "effect": "На ноутбуках с двумя видеокартами Dota 2 иногда стартует на встроенной — это минус половина fps. На ПК с одной видеокартой ничего не меняет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "none",
+    "requires": {
+      "dota": true
+    },
+    "boostIf": {
+      "hybridGpu": true
+    },
+    "boostWhy": "у вас две видеокарты: закрепляем Dota 2 за мощной",
+    "steps": [
+      {
+        "type": "regkv",
+        "path": "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences",
+        "name": "{dotaexe}",
+        "key": "GpuPreference",
+        "value": "2"
+      }
+    ],
+    "verify": [
+      {
+        "type": "regkv",
+        "path": "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences",
+        "name": "{dotaexe}",
+        "key": "GpuPreference",
+        "value": "2"
+      }
+    ]
+  },
+  {
+    "id": "dota.autoexec",
+    "group": "Dota 2",
+    "title": "Dota 2: autoexec со счётчиком fps",
+    "what": "Добавляет в autoexec.cfg Dota 2 блок pckit: счётчик fps на экране.",
+    "effect": "Сразу видно, когда проседает fps — проще понять, помогли ли настройки. Только штатная команда игры, VAC это не трогает.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "none",
+    "note": "Ваши строки в autoexec.cfg не трогаются: pckit пишет только свой блок между отметками. Dota 2 выполняет autoexec.cfg сама при запуске.",
+    "requires": {
+      "dota": true
+    },
+    "steps": [
+      {
+        "type": "cs2cfg",
+        "game": "dota",
+        "lines": [
+          "cl_showfps 1",
+          "echo \"pckit autoexec loaded\""
+        ]
+      }
+    ],
+    "verify": [
+      {
+        "type": "cs2cfg",
+        "game": "dota"
+      }
+    ]
+  },
+  {
+    "id": "dota.priority.high",
+    "group": "Dota 2",
+    "expert": true,
+    "title": "Dota 2 всегда с высоким приоритетом процессора",
+    "what": "Windows запускает dota2.exe сразу с приоритетом «Высокий» (как правило в Process Lasso, но без программы в фоне).",
+    "effect": "Фоновые программы реже отнимают процессор у игры: меньше просадок в больших драках, когда в фоне Discord или браузер. На мощном ПК с пустым фоном разницы почти нет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "note": "Действует при следующем запуске Dota 2. Приоритет «Реального времени» pckit не ставит — он вешает систему.",
+    "requires": {
+      "dota": true
+    },
+    "steps": [
+      {
+        "type": "reg",
+        "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\dota2.exe\\PerfOptions",
+        "name": "CpuPriorityClass",
+        "value": 3,
+        "valueType": "DWord"
+      }
+    ],
+    "verify": [
+      {
+        "type": "reg",
+        "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\dota2.exe\\PerfOptions",
+        "name": "CpuPriorityClass",
+        "value": 3
+      }
     ]
   },
   {

@@ -45,7 +45,23 @@ try {
             wired   = [bool]$hw.WiredNetwork
             wifi    = [bool]$hw.WifiOnly
             cs2     = [bool]$hw.Cs2Path
+            dota    = [bool]$hw.DotaPath
             raw     = $hw
+        }
+    }
+
+    # бенчмарк CS2: включена ли запись консоли, новые результаты (забираются при каждом вызове) и прошлый результат
+    function Get-BenchPayload {
+        $new = @(); $readError = ''
+        try { $new = @(Import-PckitCs2Bench) } catch { $readError = $_.Exception.Message }
+        $last = Get-PckitBenchLatest -NewCount $new.Count
+        return [pscustomobject]@{
+            cs2       = [bool](Find-PckitCs2)
+            condebug  = (Test-PckitCs2Condebug)
+            newCount  = $new.Count
+            latest    = $last.Latest
+            previous  = $last.Previous
+            readError = $readError
         }
     }
 
@@ -90,13 +106,19 @@ try {
         return $rows.ToArray()
     }
 
+    # команды, которые пишут журнал отката, — строго по одной: иначе две копии моста затрут записи друг друга
+    if ($Cmd -in 'apply', 'undo', 'undoall', 'startup-off', 'startup-on', 'bench-enable') {
+        $journalLock = New-Object System.Threading.Mutex($false, 'Local\NolagiJournal')
+        try { [void]$journalLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+    }
+
     switch ($Cmd) {
         'scan' {
             Out-Msg @{ t = 'step'; key = 'cpu'; text = 'Процессор и память' }
             $hw = Get-PckitHardwareProfile
             Out-Msg @{ t = 'step'; key = 'gpu'; text = 'Видеокарта и драйвер' }
             Out-Msg @{ t = 'step'; key = 'disk'; text = 'Диски и сеть' }
-            Out-Msg @{ t = 'step'; key = 'cs2'; text = 'Steam и CS2' }
+            Out-Msg @{ t = 'step'; key = 'cs2'; text = 'Steam, CS2 и Dota 2' }
             $actions = @(Get-PckitActions -Directory $dataDir)
             Out-Msg @{ t = 'step'; key = 'tweaks'; text = 'Текущие настройки Windows' }
             $rows = Get-ActionRows $actions $hw -Progress
@@ -210,9 +232,30 @@ try {
             if (-not (Test-PckitJournalEmpty -Journal $journal)) { [void](Save-PckitJournal -Journal $journal) }
             Out-Msg @{ t = 'result'; ok = $ok; failed = $failed }
         }
+        'fps-status' {
+            Out-Msg @{
+                t       = 'result'
+                bench   = (Get-BenchPayload)
+                history = @(Get-PckitFpsHistory -Game 'cs2' -Source 'bench')
+            }
+        }
+        'bench-check' { Out-Msg @{ t = 'result'; bench = (Get-BenchPayload) } }
+        'bench-enable' {
+            $a = @(Get-PckitActions -Directory $dataDir | Where-Object { $_.id -eq 'cs2.condebug' })
+            $res = Invoke-PckitActions -Actions $a -Run
+            $fails = @(@(@($res.Results)[0].Results) | Where-Object { $_.Status -in 'fail', 'skip' })
+            if ($fails.Count) { throw ([string]$fails[0].Message) }
+            # всё, что уже лежит в console.log, — старое: в историю попадут только следующие прогоны.
+            # Сам Reset при нечитаемом логе запоминает его длину; сюда долетает только ошибка записи состояния.
+            $warn = ''
+            try { Reset-PckitCs2BenchState } catch { $warn = ('Запись консоли включена, но не удалось запомнить конец console.log ({0}) — первый результат может оказаться старым.' -f $_.Exception.Message) }
+            Out-Msg @{ t = 'result'; bench = (Get-BenchPayload); warn = $warn }
+        }
         default { throw "unknown command: $Cmd" }
     }
 } catch {
     Out-Msg @{ t = 'error'; msg = $_.Exception.Message }
     exit 1
+} finally {
+    if ($journalLock) { try { $journalLock.ReleaseMutex() } catch { }; $journalLock.Dispose() }
 }

@@ -5,6 +5,7 @@ $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $root 'engine\Common.ps1')
 . (Join-Path $root 'engine\Snapshot.ps1')
 . (Join-Path $root 'engine\PresentMon.ps1')
+. (Join-Path $root 'engine\Bench.ps1')
 
 $script:fail = 0
 function Check {
@@ -99,6 +100,58 @@ try {
         Check "CSV $col : P99 = 20 мс" (Near $r.P99FrameMs 20 0.1) $r.P99FrameMs
         Check "CSV $col : длительность 4,16 с" (Near $r.DurationSec 4.2 0.1) $r.DurationSec
     }
+
+    # 5в. результат бенчмарк-карты из консоли CS2
+    $b = @(ConvertFrom-PckitBenchText -Text "Loaded map`r`n[VProf] FPS: Avg=268.5, P1=148.2`r`nfoo`r`n[VProf] FPS: Avg=301, P1=160.75`r`n")
+    Check 'бенчмарк: два результата' ($b.Count -eq 2) $b.Count
+    Check 'бенчмарк: Avg и P1' ($b.Count -eq 2 -and $b[0].Avg -eq 268.5 -and $b[0].P1 -eq 148.2 -and $b[1].Avg -eq 301) (($b | ForEach-Object { '{0}/{1}' -f $_.Avg, $_.P1 }) -join ' ')
+    Check 'бенчмарк: в чужом тексте ничего' (@(ConvertFrom-PckitBenchText -Text 'fps_max 400').Count -eq 0)
+
+    # 5г. чтение console.log по байтам: недописанная строка, не-UTF-8 байты, CS2 начала лог заново
+    $clog = Join-Path $tmp 'console.log'
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    $bytes = [byte[]](@(0xC0, 0xFF, 0x0A) + $enc.GetBytes("FPS: Avg=100, P1=50`n") + $enc.GetBytes('FPS: Avg=1'))
+    [IO.File]::WriteAllBytes($clog, $bytes)
+    $r1 = Read-PckitBenchLog -Log $clog -Pos 0 -Sig ''
+    Check 'лог: позиция — после последнего \n, в байтах' ($r1.Pos -eq ($bytes.Length - 10)) $r1.Pos
+    Check 'лог: найден один результат' (@(ConvertFrom-PckitBenchText -Text $r1.Text).Count -eq 1)
+    [IO.File]::AppendAllText($clog, "20, P1=60`n")
+    $r2 = Read-PckitBenchLog -Log $clog -Pos $r1.Pos -Sig $r1.Sig
+    $b2 = @(ConvertFrom-PckitBenchText -Text $r2.Text)
+    Check 'лог: дочитана строка — Avg=120' ($b2.Count -eq 1 -and $b2[0].Avg -eq 120) $r2.Text
+    # новый лог длиннее старой позиции, но с другим содержимым — читается с начала
+    [IO.File]::WriteAllText($clog, ('x' * 400) + "`nFPS: Avg=300, P1=200`n" + ('y' * 400) + "`n")
+    $r3 = Read-PckitBenchLog -Log $clog -Pos $r2.Pos -Sig $r2.Sig
+    Check 'лог: перезапуск CS2 замечен' (@(ConvertFrom-PckitBenchText -Text $r3.Text).Count -eq 1) $r3.Pos
+
+    # 5д. большой лог: результат в середине, после него ещё много строк (матчи) — читается кусками, не теряется
+    $big = New-Object System.Text.StringBuilder
+    for ($k = 0; $k -lt 300; $k++) { [void]$big.Append("spam line $k`r`n") }
+    [void]$big.Append("[VProf] FPS: Avg=222.5, P1=111.5`r`n")
+    for ($k = 0; $k -lt 300; $k++) { [void]$big.Append("match spam $k`r`n") }
+    [void]$big.Append('недописано')
+    [IO.File]::WriteAllText($clog, $big.ToString(), $enc)
+    $len = (Get-Item -LiteralPath $clog).Length
+    $r4 = Read-PckitBenchLog -Log $clog -Pos 0 -Sig '' -ChunkSize 100
+    $b4 = @(ConvertFrom-PckitBenchText -Text $r4.Text)
+    Check 'большой лог: результат из середины найден' ($b4.Count -eq 1 -and $b4[0].Avg -eq 222.5) $r4.Text
+    Check 'большой лог: позиция — до недописанной строки' ($r4.Pos -eq ($len - $enc.GetByteCount('недописано'))) $r4.Pos
+    Check 'большой лог: в тексте только строки с Avg' (-not ($r4.Text -match 'spam')) $r4.Text.Length
+
+    # 5е. «прошлый» результат — замер до этого импорта, а не второй из только что забранных
+    $oldLocal = $env:LOCALAPPDATA
+    try {
+        $env:LOCALAPPDATA = Join-Path $tmp 'local'
+        foreach ($avg in 100, 200, 300) {
+            [void](Save-PckitFpsRecord -Record ([pscustomobject]@{ game = 'cs2'; source = 'bench'; at = (Get-Date).ToString('s'); avg = $avg; low1 = 50 }))
+            Start-Sleep -Milliseconds 30
+        }
+        $lt = Get-PckitBenchLatest -NewCount 2
+        Check 'бенчмарк: свежий — последний' ($lt.Latest.avg -eq 300) $lt.Latest.avg
+        Check 'бенчмарк: прошлый — до импорта' ($lt.Previous.avg -eq 100) $lt.Previous.avg
+        $l0 = Get-PckitBenchLatest -NewCount 0
+        Check 'бенчмарк: нового нет — ничего' ($null -eq $l0.Latest -and $null -eq $l0.Previous)
+    } finally { $env:LOCALAPPDATA = $oldLocal }
 
     # 6. выбор ассета
     $rel = '{"tag_name":"v2.3.1","assets":[
