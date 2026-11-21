@@ -5,10 +5,19 @@
 $script:PckitCfgBegin = '// >>> pckit: начало (не редактируйте между этими строками — pckit перезапишет)'
 $script:PckitCfgEnd = '// <<< pckit: конец'
 
+# игры с autoexec.cfg: шаг/проверка с "game": "dota" работают с Dota 2, без поля — с CS2
+function Get-PckitGameName {
+    param([string]$Game)
+    if ($Game -eq 'dota') { return 'Dota 2' }
+    return 'CS2'
+}
+
 function Get-PckitCs2CfgDir {
-    $cs2 = Find-PckitCs2
-    if (-not $cs2) { return $null }
-    $dir = Join-Path $cs2 'game\csgo\cfg'
+    param([string]$Game = 'cs2')
+    if ($Game -eq 'dota') { $root = Find-PckitDota2; $sub = 'game\dota\cfg' }
+    else { $root = Find-PckitCs2; $sub = 'game\csgo\cfg' }
+    if (-not $root) { return $null }
+    $dir = Join-Path $root $sub
     if (Test-Path -LiteralPath $dir) { return $dir }
     return $null
 }
@@ -57,8 +66,9 @@ function Get-PckitCfgBlockLines {
 function Invoke-PckitStepCs2Cfg {
     param($Step, $Journal, [switch]$Run)
 
-    $dir = Get-PckitCs2CfgDir
-    if (-not $dir) { return [pscustomobject]@{ Status = 'skip'; Message = 'CS2 не найдена'; Failed = 0 } }
+    $game = [string]$Step.game
+    $dir = Get-PckitCs2CfgDir -Game $game
+    if (-not $dir) { return [pscustomobject]@{ Status = 'skip'; Message = ('{0} не найдена' -f (Get-PckitGameName $game)); Failed = 0 } }
     $file = Join-Path $dir 'autoexec.cfg'
     $lines = @($Step.lines | ForEach-Object { [string]$_ })
     $block = Get-PckitCs2CfgBlock -Lines $lines
@@ -77,7 +87,7 @@ function Invoke-PckitStepCs2Cfg {
         $new = Set-PckitCfgBlockText -Text $old -Block $block
         # копия на всякий случай; откат же убирает только блок pckit — правки пользователя после этого сохраняются
         if ($exists) { [void](New-PckitFileBackup -Path $file) }
-        if ($Journal) { Add-PckitCs2Tracked -Journal $Journal -Kind 'cfg' -File $file -Created (-not $exists) }
+        if ($Journal) { Add-PckitCs2Tracked -Journal $Journal -Kind 'cfg' -File $file -Created (-not $exists) -Game $game }
         # без BOM: движок Source 2 читает cfg как обычный текст
         [IO.File]::WriteAllText($file, $new, (New-Object System.Text.UTF8Encoding($false)))
         return [pscustomobject]@{ Status = 'ok'; Message = ''; Failed = 0 }
@@ -88,8 +98,9 @@ function Invoke-PckitStepCs2Cfg {
 
 function Test-PckitVerifyCs2Cfg {
     param($Verify)
-    $dir = Get-PckitCs2CfgDir
-    if (-not $dir) { return [pscustomobject]@{ Ok = $false; Detail = 'CS2 не найдена'; NotApplicable = $true } }
+    $game = [string]$Verify.game
+    $dir = Get-PckitCs2CfgDir -Game $game
+    if (-not $dir) { return [pscustomobject]@{ Ok = $false; Detail = ('{0} не найдена' -f (Get-PckitGameName $game)); NotApplicable = $true } }
     $file = Join-Path $dir 'autoexec.cfg'
     if (-not (Test-Path -LiteralPath $file)) { return [pscustomobject]@{ Ok = $false; Detail = 'autoexec.cfg нет'; NotApplicable = $false } }
     $cur = Get-PckitCfgBlockLines -Text ([IO.File]::ReadAllText($file))
@@ -272,7 +283,7 @@ function Test-PckitVerifyCs2Launch {
 # ---------- журнал CS2 (journal.cs2): откат убирает только то, что добавил pckit ----------
 
 function Add-PckitCs2Tracked {
-    param($Journal, [string]$Kind, [string]$File, [bool]$Created = $false, [string[]]$Added = @())
+    param($Journal, [string]$Kind, [string]$File, [bool]$Created = $false, [string[]]$Added = @(), [string]$Game = '')
     if (-not $Journal.Contains('cs2')) { $Journal.cs2 = New-Object System.Collections.ArrayList }
     if ($Kind -eq 'launch' -and -not @($Added).Count) { return }
     [void]$Journal.cs2.Add([pscustomobject]@{
@@ -280,6 +291,7 @@ function Add-PckitCs2Tracked {
             file    = $File
             created = $Created
             added   = @($Added)
+            game    = $Game
             at      = (Get-Date).ToString('s')
         })
 }
@@ -287,6 +299,7 @@ function Add-PckitCs2Tracked {
 function Get-PckitCs2EntryTitle {
     param($Entry)
     if ([string]$Entry.kind -eq 'launch') { return ('параметры запуска CS2: убрать {0}' -f ((@($Entry.added)) -join ' ')) }
+    if ([string]$Entry.game -eq 'dota') { return 'autoexec.cfg Dota 2: убрать блок pckit' }
     return 'autoexec.cfg: убрать блок pckit'
 }
 

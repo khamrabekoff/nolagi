@@ -83,7 +83,9 @@ namespace Pckit
 }
 '@
 
-function Find-PckitCs2 {
+# папка игры в библиотеках Steam (steamapps\common\<Folder>) или $null
+function Find-PckitSteamGame {
+    param([string]$Folder)
     $candidates = New-Object System.Collections.ArrayList
 
     try {
@@ -104,11 +106,15 @@ function Find-PckitCs2 {
         } catch { }
     }
     foreach ($root in $candidates) {
-        $path = Join-Path $root 'steamapps\common\Counter-Strike Global Offensive'
+        $path = Join-Path $root ('steamapps\common\' + $Folder)
         if (Test-Path -LiteralPath $path) { return $path }
     }
     return $null
 }
+
+function Find-PckitCs2 { return (Find-PckitSteamGame -Folder 'Counter-Strike Global Offensive') }
+
+function Find-PckitDota2 { return (Find-PckitSteamGame -Folder 'dota 2 beta') }
 
 $script:PckitHardwareCache = $null
 
@@ -217,7 +223,7 @@ function Get-PckitHardwareProfile {
         Build = [Environment]::OSVersion.Version.Build
         Hags = $null
         WiredNetwork = $null; WifiOnly = $false
-        Cs2Path = $null; Cs2Exe = $null; Cs2Video = $null
+        Cs2Path = $null; Cs2Exe = $null; Cs2Video = $null; DotaPath = $null; DotaExe = $null
         SteamRunning = $false
     }
 
@@ -318,6 +324,15 @@ function Get-PckitHardwareProfile {
         }
         $hw.Cs2Video = Get-PckitCs2VideoSettings
         $hw.SteamRunning = [bool](@(Get-Process -Name 'steam' -ErrorAction SilentlyContinue).Count)
+    } catch { }
+
+    # ---- Dota 2
+    try {
+        $hw.DotaPath = Find-PckitDota2
+        if ($hw.DotaPath) {
+            $exe = Join-Path $hw.DotaPath 'game\bin\win64\dota2.exe'
+            if (Test-Path -LiteralPath $exe) { $hw.DotaExe = $exe }
+        }
     } catch { }
 
     $script:PckitHardwareCache = [pscustomobject]$hw

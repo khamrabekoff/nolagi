@@ -45,6 +45,7 @@ try {
             wired   = [bool]$hw.WiredNetwork
             wifi    = [bool]$hw.WifiOnly
             cs2     = [bool]$hw.Cs2Path
+            dota    = [bool]$hw.DotaPath
             raw     = $hw
         }
     }
@@ -96,7 +97,7 @@ try {
             $hw = Get-PckitHardwareProfile
             Out-Msg @{ t = 'step'; key = 'gpu'; text = 'Видеокарта и драйвер' }
             Out-Msg @{ t = 'step'; key = 'disk'; text = 'Диски и сеть' }
-            Out-Msg @{ t = 'step'; key = 'cs2'; text = 'Steam и CS2' }
+            Out-Msg @{ t = 'step'; key = 'cs2'; text = 'Steam, CS2 и Dota 2' }
             $actions = @(Get-PckitActions -Directory $dataDir)
             Out-Msg @{ t = 'step'; key = 'tweaks'; text = 'Текущие настройки Windows' }
             $rows = Get-ActionRows $actions $hw -Progress

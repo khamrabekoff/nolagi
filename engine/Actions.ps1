@@ -168,7 +168,7 @@ function Test-PckitActionSupported {
     return $true
 }
 
-# подстановки в путях и именах: {cs2exe} — полный путь к cs2.exe; $null, если подставить нечего
+# подстановки в путях и именах: {cs2exe} / {dotaexe} — полный путь к cs2.exe / dota2.exe; $null, если подставить нечего
 function Expand-PckitActionText {
     param([string]$Text)
     if ($Text -notmatch '\{[a-z0-9]+\}') { return $Text }
@@ -176,6 +176,11 @@ function Expand-PckitActionText {
         $hw = Get-PckitHardwareProfile
         if (-not $hw.Cs2Exe) { return $null }
         $Text = $Text.Replace('{cs2exe}', [string]$hw.Cs2Exe)
+    }
+    if ($Text -match '\{dotaexe\}') {
+        $hw = Get-PckitHardwareProfile
+        if (-not $hw.DotaExe) { return $null }
+        $Text = $Text.Replace('{dotaexe}', [string]$hw.DotaExe)
     }
     return $Text
 }
@@ -246,7 +251,7 @@ function Test-PckitActionState {
             'regkv' {
                 $vName = Expand-PckitActionText -Text ([string]$v.name)
                 if ($null -eq $vName) {
-                    return [pscustomobject]@{ Status = 'notfit'; Checks = @([pscustomobject]@{ Ok = $false; Detail = 'CS2 не найдена' }); Applied = 0; Total = 0 }
+                    return [pscustomobject]@{ Status = 'notfit'; Checks = @([pscustomobject]@{ Ok = $false; Detail = $(if ([string]$v.name -match 'dotaexe') { 'Dota 2 не найдена' } else { 'CS2 не найдена' }) }); Applied = 0; Total = 0 }
                 }
                 $state = Get-PckitRegState -Path ([string]$v.path) -Name $vName
                 if ($state.Exists) {
@@ -630,7 +635,7 @@ function Invoke-PckitAction {
                 }
                 $newText = Set-PckitKvValue -Text $curText -Key $key -Value $kvValue
                 if ($null -eq $name) {
-                    $status = 'skip'; $msg = 'CS2 не найдена'
+                    $status = 'skip'; $msg = $(if ([string]$step.name -match 'dotaexe') { 'Dota 2 не найдена' } else { 'CS2 не найдена' })
                 } elseif ($Run) {
                     try {
                         Add-PckitRegTracked -Journal $Journal -Path $path -Name $name -Value $newText -Type 'String'

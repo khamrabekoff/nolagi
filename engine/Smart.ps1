@@ -5,7 +5,7 @@
 #   "requires": { условия }                — без них действие не применяется вообще (например, только NVIDIA)
 #   "skipIf":   { условия }, "skipWhy": "" — подходит, но этому ПК не рекомендуем
 #   "boostIf":  { условия }, "boostWhy": "" — рекомендуем этому ПК, даже если эффект в общем случае низкий
-# Условия: gpu ("nvidia"/"amd"/"intel" или список), laptop, hybridGpu, ssd, cs2, hags (true/false),
+# Условия: gpu ("nvidia"/"amd"/"intel" или список), laptop, hybridGpu, ssd, cs2, dota, hags (true/false),
 #          ramGbMin, ramGbMax, cpuCoresMax (числа). Все условия в объекте должны выполниться.
 
 function Test-PckitHwCondition {
@@ -19,6 +19,7 @@ function Test-PckitHwCondition {
             'hybridGpu'   { if ([bool]$Hw.HybridGpu -ne [bool]$v) { return $false } }
             'ssd'         { if ($null -eq $Hw.SystemSsd -or [bool]$Hw.SystemSsd -ne [bool]$v) { return $false } }
             'cs2'         { if ([bool]$Hw.Cs2Path -ne [bool]$v) { return $false } }
+            'dota'        { if ([bool]$Hw.DotaPath -ne [bool]$v) { return $false } }
             'hags'        { if ($null -eq $Hw.Hags -or [bool]$Hw.Hags -ne [bool]$v) { return $false } }
             'ramGbMin'    { if ([double]$Hw.RamGb -lt [double]$v) { return $false } }
             'ramGbMax'    { if ([double]$Hw.RamGb -gt [double]$v) { return $false } }
@@ -40,6 +41,7 @@ function Get-PckitRequiresText {
                 [void]$parts.Add(('только для видеокарт {0} (у вас: {1})' -f $names, $have))
             }
             'cs2'       { if ($p.Value) { [void]$parts.Add('CS2 не найдена в библиотеках Steam') } }
+            'dota'      { if ($p.Value) { [void]$parts.Add('Dota 2 не найдена в библиотеках Steam') } }
             'hybridGpu' { if ($p.Value) { [void]$parts.Add('нужно для ноутбуков с двумя видеокартами') } }
             'laptop'    { [void]$parts.Add($(if ($p.Value) { 'только для ноутбуков' } else { 'не для ноутбуков' })) }
             'ssd'       { [void]$parts.Add($(if ($p.Value) { 'только если Windows на SSD' } else { 'только если Windows на HDD' })) }

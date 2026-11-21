@@ -1,4 +1,4 @@
-// Nolagi.exe - window and screens. Layout in code, styles in Theme.xaml.
+﻿// Nolagi.exe - window and screens. Layout in code, styles in Theme.xaml.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -205,7 +205,7 @@ namespace Pckit
             col.Children.Add(new TextBlock { Text = "Проверяю ваш компьютер…", FontSize = 16, Foreground = Res("Mut"), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 24) });
 
             var list = new StackPanel();
-            string[] names = { "Процессор и память", "Видеокарта и драйвер", "Диски и сеть", "Steam и CS2", "Текущие настройки Windows" };
+            string[] names = { "Процессор и память", "Видеокарта и драйвер", "Диски и сеть", "Steam, CS2 и Dota 2", "Текущие настройки Windows" };
             for (int i = 0; i < scanKeys.Count; i++)
             {
                 var row = new Grid { Margin = new Thickness(0, 6, 0, 6) };
@@ -530,6 +530,7 @@ namespace Pckit
             wrap.Children.Add(tile("", "Windows", J.S(hw, "os"), J.S(hw, "build").Length > 0 ? "сборка " + J.S(hw, "build") : null));
             wrap.Children.Add(tile("", "Сеть", J.B(hw, "wired") ? "Кабель" : (J.B(hw, "wifi") ? "Только Wi‑Fi" : "—"), J.B(hw, "wifi") ? "Для игр лучше кабель: пинг стабильнее" : null));
             wrap.Children.Add(tile("", "CS2", J.B(hw, "cs2") ? "Найдена" : "Не найдена", null));
+            wrap.Children.Add(tile("", "Dota 2", J.B(hw, "dota") ? "Найдена" : "Не найдена", null));
             if (J.B(hw, "laptop")) wrap.Children.Add(tile("", "Тип", "Ноутбук", "Играйте от сети"));
 
             int fit = items.Count(i => i.Fits);
