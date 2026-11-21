@@ -166,6 +166,16 @@ function Get-PckitFpsGames {
     )
 }
 
+# нажатие клавиши в любом окне (в том числе в полноэкранной игре): GetAsyncKeyState, младший бит — «нажата с прошлого опроса».
+# Только опрос состояния одной клавиши — не перехват и не запись ввода.
+function Test-PckitKeyPressed {
+    param([int]$VirtualKey)
+    if (-not ('Pckit.KeyState' -as [type])) {
+        Add-Type -Namespace Pckit -Name KeyState -MemberDefinition '[DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);'
+    }
+    return (([int][Pckit.KeyState]::GetAsyncKeyState($VirtualKey) -band 0x8001) -ne 0)
+}
+
 function Test-PckitProcessRunning {
     param([string]$Exe)
     return [bool](@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($Exe)) -ErrorAction SilentlyContinue).Count)
@@ -182,8 +192,8 @@ function Start-PckitFpsCapture {
     $dir = Split-Path -Parent $OutCsv
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
     if (Test-Path -LiteralPath $OutCsv) { Remove-Item -LiteralPath $OutCsv -Force }
-    # --terminate_on_proc_exit: игру закрыли — замер заканчивается сам, ничего не висит в фоне
-    $argLine = '--process_name {0} --output_file "{1}" --timed {2} --terminate_after_timed --terminate_on_proc_exit --stop_existing_session --no_console_stats' -f $ProcessName, $OutCsv, $Seconds
+    # закрытие игры отслеживает вызывающий (мост) и сам останавливает PresentMon
+    $argLine = '--process_name {0} --output_file "{1}" --timed {2} --terminate_after_timed --stop_existing_session --no_console_stats' -f $ProcessName, $OutCsv, $Seconds
     return (Start-Process -FilePath $Exe -ArgumentList $argLine -WindowStyle Hidden -PassThru)
 }
 
@@ -265,14 +275,18 @@ function Save-PckitFpsRecord {
 
 # последние замеры, новые сверху
 function Get-PckitFpsHistory {
-    param([int]$Max = 20)
+    # Game/Source фильтруют ДО ограничения Max: иначе прошлый замер другой игры вытесняет нужный
+    param([int]$Max = 20, [string]$Game = '', [string]$Source = '')
     $rows = New-Object System.Collections.ArrayList
     $files = @(Get-ChildItem -LiteralPath (Get-PckitFpsDir) -Filter 'fps-*.json' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
     foreach ($f in $files) {
         if ($rows.Count -ge $Max) { break }
         try {
             $r = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($r.game -and $r.avg) { [void]$rows.Add($r) }   # старые замеры pckit («до»/«после») без поля game пропускаем
+            if (-not ($r.game -and $r.avg)) { continue }   # старые замеры pckit («до»/«после») без поля game пропускаем
+            if ($Game -and [string]$r.game -ne $Game) { continue }
+            if ($Source -and [string]$r.source -ne $Source) { continue }
+            [void]$rows.Add($r)
         } catch { }
     }
     return $rows.ToArray()

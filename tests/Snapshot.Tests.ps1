@@ -121,6 +121,23 @@ try {
     Check 'бенчмарк: Avg и P1' ($b.Count -eq 2 -and $b[0].Avg -eq 268.5 -and $b[0].P1 -eq 148.2 -and $b[1].Avg -eq 301) (($b | ForEach-Object { '{0}/{1}' -f $_.Avg, $_.P1 }) -join ' ')
     Check 'бенчмарк: в чужом тексте ничего' (@(ConvertFrom-PckitBenchText -Text 'fps_max 400').Count -eq 0)
 
+    # 5г. чтение console.log по байтам: недописанная строка, не-UTF-8 байты, CS2 начала лог заново
+    $clog = Join-Path $tmp 'console.log'
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    $bytes = [byte[]](@(0xC0, 0xFF, 0x0A) + $enc.GetBytes("FPS: Avg=100, P1=50`n") + $enc.GetBytes('FPS: Avg=1'))
+    [IO.File]::WriteAllBytes($clog, $bytes)
+    $r1 = Read-PckitBenchLog -Log $clog -Pos 0 -Sig ''
+    Check 'лог: позиция — после последнего \n, в байтах' ($r1.Pos -eq ($bytes.Length - 10)) $r1.Pos
+    Check 'лог: найден один результат' (@(ConvertFrom-PckitBenchText -Text $r1.Text).Count -eq 1)
+    [IO.File]::AppendAllText($clog, "20, P1=60`n")
+    $r2 = Read-PckitBenchLog -Log $clog -Pos $r1.Pos -Sig $r1.Sig
+    $b2 = @(ConvertFrom-PckitBenchText -Text $r2.Text)
+    Check 'лог: дочитана строка — Avg=120' ($b2.Count -eq 1 -and $b2[0].Avg -eq 120) $r2.Text
+    # новый лог длиннее старой позиции, но с другим содержимым — читается с начала
+    [IO.File]::WriteAllText($clog, ('x' * 400) + "`nFPS: Avg=300, P1=200`n" + ('y' * 400) + "`n")
+    $r3 = Read-PckitBenchLog -Log $clog -Pos $r2.Pos -Sig $r2.Sig
+    Check 'лог: перезапуск CS2 замечен' (@(ConvertFrom-PckitBenchText -Text $r3.Text).Count -eq 1) $r3.Pos
+
     # 6. выбор ассета
     $rel = '{"tag_name":"v2.3.1","assets":[
       {"name":"PresentMonCapture-2.3.1.msi","browser_download_url":"https://github.com/GameTechDev/PresentMon/releases/download/v2.3.1/PresentMonCapture-2.3.1.msi","size":100},

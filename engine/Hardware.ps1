@@ -203,7 +203,8 @@ function Get-PckitHardwareProfile {
         try {
             if (((Get-Date) - (Get-Item -LiteralPath $cacheFile).LastWriteTime).TotalMinutes -lt 10) {
                 $cached = Get-Content -LiteralPath $cacheFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($cached -and $cached.Build -eq [Environment]::OSVersion.Version.Build) {
+                # кэш от старой версии без новых полей (DotaPath) не годится — иначе после обновления «Dota 2 не найдена»
+                if ($cached -and $cached.Build -eq [Environment]::OSVersion.Version.Build -and $cached.PSObject.Properties['DotaPath']) {
                     $cached.Displays = @($cached.Displays); $cached.GpuList = @($cached.GpuList)
                     $script:PckitHardwareCache = $cached
                     return $cached

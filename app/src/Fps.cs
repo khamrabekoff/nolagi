@@ -18,8 +18,10 @@ namespace Pckit
         RadioButton navFps;
 
         // состояние замера живёт отдельно от страницы: ушли на другую вкладку и вернулись — видно, что идёт
-        Task<Dictionary<string, object>> fpsTask;
-        string fpsPhase = "";          // wait | countdown | run | install
+        Task<Dictionary<string, object>> fpsTask;      // замер
+        Task<Dictionary<string, object>> installTask;  // скачивание PresentMon (отдельно: его можно бросить)
+        bool installAbandoned, fpsCancelling;
+        string fpsPhase = "";          // wait | key | run | install
         double fpsI, fpsN, fpsLive;
         int fpsLeft;
         string fpsText = "";
@@ -35,12 +37,13 @@ namespace Pckit
         const double RingSize = 190, RingStroke = 12;
 
         bool FpsBusy { get { return fpsTask != null && !fpsTask.IsCompleted; } }
+        bool Installing { get { return installTask != null && !installTask.IsCompleted && !installAbandoned; } }
         bool FpsPageOpen { get { return navFps != null && navFps.IsChecked == true; } }
         static string CancelFlag { get { return System.IO.Path.Combine(Payload.Root, "fps-cancel.flag"); } }
 
         async void ShowFps()
         {
-            if (FpsBusy) { RenderFpsRunning(); return; }
+            if (FpsBusy || Installing) { RenderFpsRunning(); return; }
             var wait = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             wait.Children.Add(Spinner(36));
             SetPage(PageFrame("Замер FPS", null, wait));
@@ -60,7 +63,7 @@ namespace Pckit
                 res["gameName"] = "CS2 · бенчмарк";
                 fpsResult = res;
             }
-            if (FpsPageOpen && !FpsBusy) RenderFpsIdle();
+            if (FpsPageOpen && !FpsBusy && !Installing) RenderFpsIdle();
         }
 
         // ---------------------------------------------------------------- выбор игры и старт
@@ -104,7 +107,7 @@ namespace Pckit
                 start.HorizontalAlignment = HorizontalAlignment.Left;
                 start.Click += (s, e) => StartFps();
                 c.Children.Add(start);
-                var how = T("Нажмите кнопку и зайдите в Dota 2 на карту — демо-режим героя или бот-матч. Как только игра запущена, через 5 секунд начнётся замер. " +
+                var how = T("Нажмите кнопку, зайдите в Dota 2 на карту — демо-режим героя или бот-матч — и нажмите F10 прямо в игре: с этого момента идёт замер. " +
                             "Повторяйте одну и ту же сцену, тогда «до» и «после» можно честно сравнить. FPS считает Intel PresentMon: он только читает события Windows о кадрах.", 13, "Mut");
                 how.Margin = new Thickness(0, 12, 0, 0);
                 c.Children.Add(how);
@@ -175,7 +178,9 @@ namespace Pckit
                     catch (Exception ex) { fpsError = "Не получилось прочитать консоль CS2: " + ex.Message; }
                     if (b != null)
                     {
-                        if (J.N(b, "newCount") > 0)
+                        if (J.S(b, "readError").Length > 0)
+                            fpsError = "Не удалось прочитать консоль CS2 — скорее всего, игра держит файл. Закройте CS2 и нажмите ещё раз.";
+                        else if (J.N(b, "newCount") > 0)
                         {
                             var res = new Dictionary<string, object>();
                             res["record"] = J.O(b, "latest");
@@ -228,25 +233,32 @@ namespace Pckit
         async void InstallThenMeasure()
         {
             fpsPhase = "install"; fpsText = "Скачиваю PresentMon"; fpsLive = 0;
+            installAbandoned = false;
             var task = Bridge.Run("fps-install", null, m => Dispatcher.BeginInvoke(new Action(() => { fpsText = J.S(m, "text"); UpdateFpsLive(); })));
-            fpsTask = task;
+            installTask = task;
             if (FpsPageOpen) RenderFpsRunning();
+            UpdateNavFps();
+            Exception err = null;
             try { await task; }
-            catch (Exception ex)
+            catch (Exception ex) { err = ex; }
+            bool abandoned = installAbandoned || installTask != task;
+            if (installTask == task) installTask = null;
+            UpdateNavFps();
+            if (abandoned) return;   // пользователь нажал «Отмена» — файл, если скачался, просто пригодится в следующий раз
+            if (err != null)
             {
-                fpsTask = null;
-                fpsError = "PresentMon не установлен: " + ex.Message;
+                fpsError = "PresentMon не установлен: " + err.Message;
                 if (FpsPageOpen) RenderFpsIdle();
                 return;
             }
-            fpsTask = null;
-            fpsStatus["presentMon"] = true;
+            if (fpsStatus != null) fpsStatus["presentMon"] = true;
             RunMeasure();
         }
 
         async void RunMeasure()
         {
             try { File.Delete(CancelFlag); } catch { }
+            fpsCancelling = false;
             fpsPhase = "wait"; fpsI = 0; fpsN = 1; fpsLive = 0; fpsLeft = 0;
             fpsText = "";
             var task = Bridge.Run("fps-measure", new[] { fpsGame, fpsSeconds.ToString(CultureInfo.InvariantCulture) },
@@ -259,6 +271,7 @@ namespace Pckit
             try { res = await task; }
             catch (Exception ex) { fpsError = "Замер не получился: " + ex.Message; }
             fpsTask = null;
+            fpsCancelling = false;
             try { File.Delete(CancelFlag); } catch { }
             UpdateNavFps();
             if (res != null && !J.B(res, "cancelled")) fpsResult = res;
@@ -289,8 +302,9 @@ namespace Pckit
 
         void CancelFps()
         {
+            if (fpsPhase == "install") { installAbandoned = true; UpdateNavFps(); RenderFpsIdle(); return; }
             try { File.WriteAllText(CancelFlag, "cancel"); } catch { }
-            fpsText = "Останавливаю…";
+            fpsCancelling = true;
             UpdateFpsLive();
         }
 
@@ -319,7 +333,7 @@ namespace Pckit
                 RenderTransform = new RotateTransform(-90)
             };
             ring.Children.Add(fpsArc);
-            if (fpsPhase == "wait" || fpsPhase == "install")
+            if (fpsPhase == "wait" || fpsPhase == "key" || fpsPhase == "install")
             {
                 // ожидание: бегущая дуга
                 var rt = new RotateTransform(-90);
@@ -338,15 +352,14 @@ namespace Pckit
             fpsCaption = new TextBlock { FontSize = 16, HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 };
             col.Children.Add(fpsCaption);
 
+            var stop = Btn(fpsPhase == "install" ? "Отмена" : "Остановить");
+            stop.HorizontalAlignment = HorizontalAlignment.Center;
+            stop.Margin = new Thickness(0, 18, 0, 0);
+            stop.IsEnabled = !fpsCancelling;
+            stop.Click += (s, e) => { stop.IsEnabled = false; CancelFps(); };
+            col.Children.Add(stop);
             if (fpsPhase != "install")
-            {
-                var stop = Btn("Остановить");
-                stop.HorizontalAlignment = HorizontalAlignment.Center;
-                stop.Margin = new Thickness(0, 18, 0, 0);
-                stop.Click += (s, e) => { stop.IsEnabled = false; CancelFps(); };
-                col.Children.Add(stop);
                 col.Children.Add(new TextBlock { Text = "Замер идёт в фоне — можно открыть другие вкладки.", FontSize = 12.5, Foreground = Res("Mut"), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 0) });
-            }
             SetPage(PageFrame("Замер FPS", null, col));
             UpdateFpsLive();
         }
@@ -364,6 +377,12 @@ namespace Pckit
         {
             if (fpsBig == null || !FpsPageOpen) return;
             string game = fpsGame == "dota" ? "Dota 2" : "CS2";
+            if (fpsCancelling && fpsPhase != "install")
+            {
+                fpsBig.Text = ""; fpsSub.Text = "";
+                fpsCaption.Text = "Останавливаю…";
+                return;
+            }
             switch (fpsPhase)
             {
                 case "install":
@@ -373,19 +392,18 @@ namespace Pckit
                 case "wait":
                     fpsBig.Text = "";
                     fpsSub.Text = "жду игру";
-                    fpsCaption.Text = fpsText == "Останавливаю…" ? fpsText : "Запустите " + game + " и зайдите на карту — замер начнётся сам.";
+                    fpsCaption.Text = "Запустите " + game + ".";
                     break;
-                case "countdown":
-                    fpsBig.Text = fpsLeft.ToString(CultureInfo.InvariantCulture);
-                    fpsSub.Text = "до старта";
-                    fpsCaption.Text = fpsText == "Останавливаю…" ? fpsText : "Переключитесь в игру и играйте как обычно.";
-                    SetArc(fpsI / fpsN);
+                case "key":
+                    fpsBig.Text = "F10";
+                    fpsSub.Text = "для старта";
+                    fpsCaption.Text = "Зайдите в " + game + " на карту — демо-режим героя или бот-матч — и нажмите F10 прямо в игре. Замер начнётся сразу.";
                     break;
                 case "run":
                     fpsBig.Text = fpsLive > 0 ? fpsLive.ToString("0", CultureInfo.InvariantCulture) : "—";
                     fpsSub.Text = "FPS сейчас";
                     int left = (int)Math.Max(0, fpsN - fpsI);
-                    fpsCaption.Text = fpsText == "Останавливаю…" ? fpsText : "Идёт замер " + game + " · осталось " + left + " сек";
+                    fpsCaption.Text = "Идёт замер " + game + " · осталось " + left + " сек";
                     SetArc(fpsI / fpsN);
                     break;
             }
@@ -396,11 +414,12 @@ namespace Pckit
         {
             if (navFps == null) return;
             navFps.Opacity = 1;
-            navFps.ToolTip = FpsBusy ? "Идёт замер FPS" : null;
+            bool busy = FpsBusy || Installing;
+            navFps.ToolTip = busy ? "Идёт замер FPS" : null;
             var sp = navFps.Content as StackPanel;
             if (sp == null) return;
             if (sp.Children.Count > 2) sp.Children.RemoveAt(2);
-            if (FpsBusy)
+            if (busy)
             {
                 var dot = new Ellipse { Width = 8, Height = 8, Fill = Res("Acc"), Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
                 dot.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.25, TimeSpan.FromSeconds(0.7)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });

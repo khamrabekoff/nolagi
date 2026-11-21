@@ -52,17 +52,18 @@ try {
 
     # бенчмарк CS2: включена ли запись консоли, новые результаты (забираются при каждом вызове) и прошлый результат
     function Get-BenchPayload {
-        $new = @()
-        try { $new = @(Import-PckitCs2Bench) } catch { }
-        $hist = @(Get-PckitFpsHistory | Where-Object { $_.source -eq 'bench' })
+        $new = @(); $readError = ''
+        try { $new = @(Import-PckitCs2Bench) } catch { $readError = $_.Exception.Message }
+        $hist = @(Get-PckitFpsHistory -Max 2 -Source 'bench')
         $latest = $null; $prev = $null
         if ($new.Count) { $latest = $hist[0]; if ($hist.Count -gt 1) { $prev = $hist[1] } }
         return [pscustomobject]@{
-            cs2      = [bool](Find-PckitCs2)
-            condebug = (Test-PckitCs2Condebug)
-            newCount = $new.Count
-            latest   = $latest
-            previous = $prev
+            cs2       = [bool](Find-PckitCs2)
+            condebug  = (Test-PckitCs2Condebug)
+            newCount  = $new.Count
+            latest    = $latest
+            previous  = $prev
+            readError = $readError
         }
     }
 
@@ -243,6 +244,8 @@ try {
             $res = Invoke-PckitActions -Actions $a -Run
             $fails = @(@(@($res.Results)[0].Results) | Where-Object { $_.Status -in 'fail', 'skip' })
             if ($fails.Count) { throw ([string]$fails[0].Message) }
+            # всё, что уже лежит в console.log, — старое: в историю попадут только следующие прогоны
+            try { Reset-PckitCs2BenchState } catch { }
             Out-Msg @{ t = 'result'; bench = (Get-BenchPayload) }
         }
         'fps-install' {
@@ -261,8 +264,8 @@ try {
             if ($want.Count -gt 1) { $seconds = [math]::Max(10, [math]::Min(300, [int]$want[1])) }
             $pm = Find-PckitPresentMon
             if (-not $pm) { throw 'PresentMon не установлен' }
+            # флаг стирает только окно перед запуском: если стирать здесь, «Остановить», нажатое пока грузится движок, потеряется
             $cancelFlag = Join-Path $Root 'fps-cancel.flag'
-            Remove-Item -LiteralPath $cancelFlag -Force -ErrorAction SilentlyContinue
             $cancelled = { Test-Path -LiteralPath $cancelFlag }
 
             # 1) ждём игру (до 10 минут)
@@ -273,11 +276,16 @@ try {
                 Out-Msg @{ t = 'progress'; phase = 'wait'; i = $waited; n = 600; text = ('Жду запуска {0}' -f $game.Name) }
                 Start-Sleep -Seconds 1; $waited++
             }
-            # 2) пять секунд, чтобы переключиться в игру
-            for ($c = 5; $c -ge 1; $c--) {
+            # 2) игра запущена, но игрок может быть ещё в меню: старт — по F10, нажатой прямо в игре (до 15 минут)
+            [void](Test-PckitKeyPressed -VirtualKey 0x79)   # сбросить «нажата с прошлого раза»
+            $waited = 0
+            while ($true) {
                 if (& $cancelled) { Out-Msg @{ t = 'result'; cancelled = $true }; return }
-                Out-Msg @{ t = 'progress'; phase = 'countdown'; i = 5 - $c; n = 5; left = $c; text = 'Переключитесь в игру' }
-                Start-Sleep -Seconds 1
+                if (-not (Test-PckitProcessRunning $game.Exe)) { throw ('{0} закрылась до начала замера' -f $game.Name) }
+                if ($waited -ge 9000) { throw 'F10 так и не нажали за 15 минут' }
+                if (($waited % 10) -eq 0) { Out-Msg @{ t = 'progress'; phase = 'key'; i = 0; n = 1; text = 'Зайдите на карту и нажмите F10' } }
+                if (Test-PckitKeyPressed -VirtualKey 0x79) { break }
+                Start-Sleep -Milliseconds 100; $waited++
             }
             # 3) замер: каждую секунду — живой FPS
             $csv = Join-Path (Get-PckitFpsDir) ('capture-{0}.csv' -f $game.Id)
@@ -299,6 +307,7 @@ try {
                     $el = [math]::Min($seconds, [int]$sw.Elapsed.TotalSeconds)
                     Out-Msg @{ t = 'progress'; phase = 'run'; i = $el; n = $seconds; fps = $fps; text = 'Идёт замер' }
                     if ($sw.Elapsed.TotalSeconds -gt $seconds + 30) { try { $proc.Kill() } catch { }; break }   # PresentMon завис
+                    if (-not (Test-PckitProcessRunning $game.Exe)) { try { $proc.Kill() } catch { }; break }  # игру закрыли
                 }
                 foreach ($x in (Read-PckitFpsTail -Tail $tail)) { $all.Add($x) }
             } finally {
@@ -310,7 +319,7 @@ try {
                 throw 'слишком мало кадров — игра была свёрнута или на паузе?'
             }
             $stats = Get-PckitFpsStats -Times $all.ToArray()
-            $prev = @(Get-PckitFpsHistory | Where-Object { $_.game -eq $game.Id })[0]
+            $prev = @(Get-PckitFpsHistory -Max 1 -Game $game.Id -Source 'presentmon')[0]
             $rec = Save-PckitFpsResult -Game $game.Id -Seconds $seconds -Stats $stats
             Out-Msg @{ t = 'result'; record = $rec; previous = $prev; gameName = $game.Name }
         }

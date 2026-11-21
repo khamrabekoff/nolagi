@@ -1,4 +1,4 @@
-// pckit.exe - core: payload extraction, engine bridge, settings, telemetry. C# 5 / .NET Framework 4.8.
+﻿// pckit.exe - core: payload extraction, engine bridge, settings, telemetry. C# 5 / .NET Framework 4.8.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -286,6 +286,8 @@ namespace Pckit
     public static class Telemetry
     {
         public const string Base = "https://api.nolagi.dpdns.org";
+        // прежний адрес: сервер мог выдать ссылку на скачивание с него (его ещё слушают копии 1.0.0)
+        public const string OldBase = "https://158-101-202-7.sslip.io";
         const string Url = Base + "/api/v1/report";
         public static string Key = "";
         public static Settings Cfg;
@@ -364,7 +366,9 @@ namespace Pckit
     {
         public static Task<string> Download(string url, string sha256, Action<int> progress)
         {
-            if (!url.StartsWith(Telemetry.Base + "/download/", StringComparison.OrdinalIgnoreCase))
+            if (url != null && url.StartsWith("/download/", StringComparison.Ordinal)) url = Telemetry.Base + url;   // относительная ссылка
+            if (url == null || !(url.StartsWith(Telemetry.Base + "/download/", StringComparison.OrdinalIgnoreCase) ||
+                                 url.StartsWith(Telemetry.OldBase + "/download/", StringComparison.OrdinalIgnoreCase)))
                 throw new Exception("адрес обновления не с сервера Nolagi");
             string dir = Path.Combine(SafeDir.Base, "update");
             Directory.CreateDirectory(dir);
