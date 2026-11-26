@@ -1431,6 +1431,24 @@
     ]
   },
   {
+    "id": "net.msi.on",
+    "group": "Сеть",
+    "expert": true,
+    "title": "Сетевая карта: режим прерываний MSI",
+    "what": "Переводит сетевую карту на прерывания MSI (сообщениями) вместо старых линейных.",
+    "effect": "На части систем чуть меньше задержка обработки сетевых пакетов и ровнее пинг. Современные драйверы часто включают MSI сами.",
+    "effectLevel": "низкий",
+    "risk": "medium",
+    "needs": "admin",
+    "note": "Действует после перезагрузки. Если пропал интернет — откатите настройку в Nolagi и перезагрузите ПК.",
+    "steps": [
+      { "type": "devreg", "target": "pcinet", "sub": "Interrupt Management\\MessageSignaledInterruptProperties", "name": "MSISupported", "value": 1 }
+    ],
+    "verify": [
+      { "type": "devreg", "target": "pcinet", "sub": "Interrupt Management\\MessageSignaledInterruptProperties", "name": "MSISupported", "value": 1 }
+    ]
+  },
+  {
     "id": "wer.full.off",
     "group": "Конфиденциальность",
     "title": "Отчёты об ошибках Windows: выключить полностью",
@@ -1775,6 +1793,24 @@
     ],
     "verify": [
       { "type": "reg", "path": "HKCU:\\Control Panel\\Desktop", "name": "MenuShowDelay", "value": "100" }
+    ]
+  },
+  {
+    "id": "explorer.classicmenu",
+    "group": "Удобство",
+    "title": "Старое меню по правой кнопке мыши (как в Windows 10)",
+    "what": "Возвращает привычное полное меню правой кнопки без пункта «Показать дополнительные параметры».",
+    "effect": "Удобство: нужные пункты сразу на виду. На fps не влияет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "none",
+    "minBuild": 22000,
+    "note": "Заработает после перезапуска проводника или повторного входа в Windows.",
+    "steps": [
+      { "type": "reg", "path": "HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32", "name": "", "value": "", "valueType": "String" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32", "name": "", "value": "" }
     ]
   },
   {

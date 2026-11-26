@@ -54,7 +54,7 @@ namespace Pckit
 
             // ---- видеокарта подробно
             var gsp = new StackPanel();
-            gsp.Children.Add(SectionHead("Видеокарта", "Данные драйвера NVIDIA (nvidia-smi), обновляются раз в секунду.", true));
+            gsp.Children.Add(SectionHead("Видеокарта", "Данные драйвера NVIDIA, обновляются раз в секунду.", true));
             var grid = new Grid();
             for (int i = 0; i < 4; i++) grid.ColumnDefinitions.Add(new ColumnDefinition());
             grid.RowDefinitions.Add(new RowDefinition()); grid.RowDefinitions.Add(new RowDefinition());

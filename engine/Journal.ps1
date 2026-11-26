@@ -92,6 +92,53 @@ function Test-PckitRegValue {
     return ($item.GetValueNames() -contains $Name)
 }
 
+# запись значения; пустое имя = значение «по умолчанию» ключа (New-ItemProperty пустое имя не принимает)
+function Set-PckitRegValueRaw {
+    param([string]$Path, [string]$Name, $Value, [string]$Type)
+    if ($Name -eq '') {
+        New-ItemProperty -LiteralPath $Path -Name '(default)' -Value $Value -PropertyType $Type -Force | Out-Null
+    } else {
+        New-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -PropertyType $Type -Force | Out-Null
+    }
+}
+
+# удаление значения; пустое имя = только значение «по умолчанию» (Clear-Item стёр бы все значения ключа)
+function Remove-PckitRegValueRaw {
+    param([string]$Path, [string]$Name)
+    if ($Name -eq '') {
+        # Remove-ItemProperty не умеет удалять «(по умолчанию)» — через .NET, остальные значения ключа не трогаем
+        $full = (Get-Item -LiteralPath $Path -ErrorAction Stop).Name
+        $hive = $full.Substring(0, $full.IndexOf('\'))
+        $root = switch ($hive) {
+            'HKEY_CURRENT_USER'  { [Microsoft.Win32.Registry]::CurrentUser }
+            'HKEY_LOCAL_MACHINE' { [Microsoft.Win32.Registry]::LocalMachine }
+            'HKEY_CLASSES_ROOT'  { [Microsoft.Win32.Registry]::ClassesRoot }
+            'HKEY_USERS'         { [Microsoft.Win32.Registry]::Users }
+            default              { throw ('неизвестный раздел реестра: ' + $hive) }
+        }
+        $key = $root.OpenSubKey($full.Substring($hive.Length + 1), $true)
+        if (-not $key) { throw ('нет доступа к ' + $full) }
+        try { $key.DeleteValue('', $false) } finally { $key.Close() }
+    }
+    else { Remove-ItemProperty -LiteralPath $Path -Name $Name -Force -ErrorAction Stop }
+}
+
+# самый верхний ещё не существующий родитель пути (его создаст запись) — чтобы откат убрал пустые ключи
+function Get-PckitMissingRoot {
+    param([string]$Path)
+    if (Test-Path -LiteralPath $Path) { return $null }
+    $missing = $Path
+    $cur = $Path
+    while ($true) {
+        $parent = Split-Path -Parent $cur
+        if (-not $parent -or $parent -eq $cur -or $parent -match '^[A-Za-z]+:\\?$') { break }
+        if (Test-Path -LiteralPath $parent) { break }
+        $missing = $parent
+        $cur = $parent
+    }
+    return $missing
+}
+
 function Get-PckitRegValueInfo {
     param([string]$Path, [string]$Name)
     $item = Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue
@@ -123,6 +170,8 @@ function Add-PckitRegTracked {
     }
     if (-not $already) {
         $info = Get-PckitRegValueInfo -Path $Path -Name $Name
+        # только для значения «по умолчанию» (пустое имя): пустой ключ сам по себе меняет поведение Windows
+        $madeRoot = if ($Name -eq '') { Get-PckitMissingRoot -Path $Path } else { $null }
         $entry = [pscustomobject]@{
             path    = $Path
             name    = $Name
@@ -131,11 +180,13 @@ function Add-PckitRegTracked {
             value   = if ($info) { $info.Value } else { $null }
             at      = (Get-Date).ToString('s')
         }
+        # ключи, которых до нас не было: при откате пустые убираем
+        if ($madeRoot) { $entry | Add-Member -NotePropertyName createdRoot -NotePropertyValue $madeRoot }
         [void]$Journal.registry.Add($entry)
     }
 
     if (-not (Test-Path -LiteralPath $Path)) { New-Item -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null }
-    New-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -PropertyType $Type -Force | Out-Null
+    Set-PckitRegValueRaw -Path $Path -Name $Name -Value $Value -Type $Type
 }
 
 function Remove-PckitRegTracked {
@@ -161,7 +212,7 @@ function Remove-PckitRegTracked {
             })
     }
     if (Test-PckitRegValue -Path $Path -Name $Name) {
-        Remove-ItemProperty -LiteralPath $Path -Name $Name -Force -ErrorAction SilentlyContinue
+        try { Remove-PckitRegValueRaw -Path $Path -Name $Name } catch { }
     }
 }
 
@@ -322,7 +373,7 @@ function Restore-PckitJournal {
                     if ($o -and (& $keyOf[$k] $o) -eq $key -and [string]$o.at -ge [string]$e.at) { $later = $o; break }
                 }
                 if (-not $later) { [void]$keepSel.Add($e); continue }
-                if ($k -eq 'registry') { $later.existed = $e.existed; $later.type = $e.type; $later.value = $e.value }
+                if ($k -eq 'registry') { $later.existed = $e.existed; $later.type = $e.type; $later.value = $e.value; if ($e.createdRoot) { $later | Add-Member -NotePropertyName createdRoot -NotePropertyValue $e.createdRoot -Force } }
                 else { $later.restore = $e.restore; $later.value = $e.value }
                 $chained++
             }
@@ -420,10 +471,16 @@ function Restore-PckitJournal {
                         'DWord'       { $val = [int]$val }
                         'QWord'       { $val = [long]$val }
                     }
-                    New-ItemProperty -LiteralPath $e.path -Name $e.name -Value $val -PropertyType $e.type -Force | Out-Null
+                    Set-PckitRegValueRaw -Path $e.path -Name ([string]$e.name) -Value $val -Type ([string]$e.type)
                 } else {
                     if (Test-PckitRegValue -Path $e.path -Name $e.name) {
-                        Remove-ItemProperty -LiteralPath $e.path -Name $e.name -Force
+                        Remove-PckitRegValueRaw -Path $e.path -Name ([string]$e.name)
+                    }
+                    # ключи, созданные самим pckit: убираем, если в них не осталось значений
+                    if ($e.createdRoot -and (Test-Path -LiteralPath $e.createdRoot)) {
+                        $left = @(Get-Item -LiteralPath $e.createdRoot) + @(Get-ChildItem -LiteralPath $e.createdRoot -Recurse -ErrorAction SilentlyContinue)
+                        $busy = @($left | Where-Object { $_.ValueCount -gt 0 })
+                        if ($busy.Count -eq 0) { Remove-Item -LiteralPath $e.createdRoot -Recurse -Force -ErrorAction SilentlyContinue }
                     }
                 }
                 $status = 'ok'

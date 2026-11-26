@@ -457,14 +457,15 @@ function Invoke-PckitStepHibernate {
 
 # devreg: одно значение реестра на всех подходящих устройствах этого ПК.
 # target: display (ключ драйвера видеокарты, vendor), net (ключ драйвера физической сетевой карты),
-#         tcpif (TCP-параметры интерфейса физической карты), pcidisplay (Enum\PCI видеокарты + sub).
+#         tcpif (TCP-параметры интерфейса физической карты), pcidisplay (Enum\PCI видеокарты + sub),
+#         pcinet (Enum\PCI физической сетевой карты + sub; только PCI-карты, USB и виртуальные пропускаются).
 # ndi: true — писать только если драйвер сетевой карты знает такой параметр (Ndi\Params\<name>).
 function Get-PckitDevRegTargets {
     param($Step)
 
     $paths = New-Object System.Collections.ArrayList
     $physical = @()
-    if ([string]$Step.target -in 'net', 'tcpif') {
+    if ([string]$Step.target -in 'net', 'tcpif', 'pcinet') {
         try { $physical = @(Get-NetAdapter -Physical -ErrorAction Stop) } catch { $physical = @() }
     }
     switch ([string]$Step.target) {
@@ -500,6 +501,14 @@ function Get-PckitDevRegTargets {
             foreach ($d in $devs) {
                 if ($Step.vendor -and ([string]$d.Manufacturer + ' ' + [string]$d.FriendlyName) -notmatch [regex]::Escape([string]$Step.vendor)) { continue }
                 [void]$paths.Add(('HKLM:\SYSTEM\CurrentControlSet\Enum\{0}\Device Parameters' -f $d.InstanceId))
+            }
+        }
+        'pcinet' {
+            foreach ($a in $physical) {
+                $id = [string]$a.PnPDeviceID
+                if (-not $id -or $id -notlike 'PCI\*') { continue }
+                $p = 'HKLM:\SYSTEM\CurrentControlSet\Enum\{0}\Device Parameters' -f $id
+                if ($paths -notcontains $p) { [void]$paths.Add($p) }
             }
         }
     }

@@ -65,6 +65,7 @@ namespace Pckit
                 sp.Children.Add(Note(fpsError, "Bad", "BadSoft"));
                 fpsError = null;
             }
+            AddAnyGameCards(sp);
             if (fpsResult != null) sp.Children.Add(ResultCard(fpsResult));
 
             if (bench != null && J.B(bench, "cs2")) sp.Children.Add(BenchCard(bench));
@@ -78,7 +79,8 @@ namespace Pckit
 
             var hist = J.A(fpsStatus, "history");
             if (hist.Count > 0) sp.Children.Add(HistoryCard(hist));
-            SetPage(PageFrame("Замер FPS", "Средний FPS и 1% low — чтобы видеть, помогли ли настройки.", Scroll(sp)));
+            AddAnyHistory(sp);
+            SetPage(PageFrame("Замер FPS", "Средний FPS и 1% low в любой игре — чтобы видеть, помогли ли настройки.", Scroll(sp)));
         }
 
         Border BenchCard(Dictionary<string, object> bench)

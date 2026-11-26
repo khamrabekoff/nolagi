@@ -247,6 +247,8 @@ namespace Pckit
         public bool Consent;
         public bool Asked;
         public List<int> SeenNews = new List<int>();
+        public bool OverlayOn;
+        public int OverlayCorner = 1;   // 0 слева сверху, 1 справа сверху, 2 слева снизу, 3 справа снизу
 
         static string FilePath
         {
@@ -262,6 +264,8 @@ namespace Pckit
                 {
                     var d = J.Parse(File.ReadAllText(FilePath, Encoding.UTF8));
                     s.Id = J.S(d, "id"); s.Nick = J.S(d, "nick"); s.Consent = J.B(d, "consent"); s.Asked = J.B(d, "asked");
+                    s.OverlayOn = J.B(d, "overlay");
+                    if (J.Get(d, "overlayCorner") != null) s.OverlayCorner = Math.Max(0, Math.Min(3, (int)J.N(d, "overlayCorner")));
                     var seen = J.Get(d, "seenNews") as object[];
                     if (seen != null) foreach (var x in seen) { try { s.SeenNews.Add(Convert.ToInt32(x)); } catch { } }
                 }
@@ -276,7 +280,7 @@ namespace Pckit
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
-                File.WriteAllText(FilePath, J.Write(new Dictionary<string, object> { { "id", Id }, { "nick", Nick }, { "consent", Consent }, { "asked", Asked }, { "seenNews", SeenNews.ToArray() } }), new UTF8Encoding(false));
+                File.WriteAllText(FilePath, J.Write(new Dictionary<string, object> { { "id", Id }, { "nick", Nick }, { "consent", Consent }, { "asked", Asked }, { "seenNews", SeenNews.ToArray() }, { "overlay", OverlayOn }, { "overlayCorner", OverlayCorner } }), new UTF8Encoding(false));
             }
             catch { }
         }

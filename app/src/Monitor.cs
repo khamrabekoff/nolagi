@@ -87,7 +87,8 @@ namespace Pckit
 
         public void Start()
         {
-            if (File.Exists(SmiPath)) StartSmi("clocks_event_reasons.active");
+            // сначала nvml.dll (без дочернего процесса), nvidia-smi — запасной путь
+            if (!Nvml.Available && File.Exists(SmiPath)) StartSmi("clocks_event_reasons.active");
         }
 
         void StartSmi(string reasonField)
@@ -205,7 +206,7 @@ namespace Pckit
                 s.RamTotalGb = m.ullTotalPhys / 1073741824.0;
                 s.RamUsedGb = (m.ullTotalPhys - m.ullAvailPhys) / 1073741824.0;
             }
-            lock (gate)
+            if (!Nvml.Read(s)) lock (gate)
             {
                 s.Nvidia = gpu.Nvidia; s.GpuName = gpu.GpuName;
                 s.GpuTemp = gpu.GpuTemp; s.GpuLoad = gpu.GpuLoad; s.GpuClock = gpu.GpuClock; s.GpuMemClock = gpu.GpuMemClock;

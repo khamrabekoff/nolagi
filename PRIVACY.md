@@ -34,7 +34,8 @@ Nolagi работает на вашем ПК и ничего не отправл
 
 ## Что хранится на ПК
 
-- `%LOCALAPPDATA%\Nolagi\client.json` — ник, согласие, номер установки.
+- `%LOCALAPPDATA%\Nolagi\client.json` — ник, согласие, номер установки, включён ли оверлей FPS.
+- `%LOCALAPPDATA%\Nolagi\fps-runs.json` — ваши замеры FPS в играх (название exe игры, дата, FPS). Никуда не отправляется.
 - `%ProgramData%\pckit\` — журнал отката (что и как вернуть).
 - `%ProgramData%\Nolagi\` — служебные скрипты программы.
 
