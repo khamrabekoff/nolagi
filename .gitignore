@@ -2,6 +2,7 @@
 state/
 tests/sandbox/out/
 *.png
+!site/img/*.png
 *.log
 *.pckit
 
