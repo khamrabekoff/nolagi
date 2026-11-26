@@ -126,6 +126,8 @@ function Test-PckitScModeEqual {
     param([string]$Current, [string]$Target)
     if ($Current -eq $Target) { return $true }
     if ($Target -eq 'auto' -and $Current -eq 'delayed-auto') { return $true }
+    # «по требованию» уже выполнено, если служба выключена совсем (её выключил пользователь или другая программа)
+    if ($Target -eq 'demand' -and $Current -eq 'disabled') { return $true }
     return $false
 }
 

@@ -187,7 +187,7 @@ function Get-PckitSmartFindings {
 
     if ($Hw.GpuName -or $Hw.CpuName) {
         [void]$f.Add((New-PckitFinding -Severity 'info' -Title ('Ваш ПК: {0}' -f (Format-PckitHardwareLine $Hw)) `
-                    -Detail 'pckit подбирает настройки под это железо: лишнее для вашего ПК не предлагается.'))
+                    -Detail 'Nolagi подбирает настройки под это железо: лишнее для вашего ПК не предлагается.'))
     }
 
     # ---- монитор

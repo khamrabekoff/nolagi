@@ -24,10 +24,14 @@ function Get-PckitStartupExe {
 }
 
 function Get-PckitStartupAdvice {
-    param([string]$Name, [string]$Exe, [string]$Publisher)
+    param([string]$Name, [string]$Exe, [string]$Publisher, [switch]$Task)
     $hay = ('{0} {1} {2}' -f $Name, $Exe, $Publisher)
     if ($hay -match $script:PckitStartupKeep) {
         return [pscustomobject]@{ Advice = 'нужно'; Note = 'драйвер, античит, защита Windows или утилита устройства — лучше оставить' }
+    }
+    # задачи-обновлялки (Google, Edge, Opera, Adobe…): выключить можно, но программа перестанет обновляться сама
+    if ($Task -and $hay -match 'Update|Updater|Upgrade|AutoUpdate|Обновл') {
+        return [pscustomobject]@{ Advice = 'на ваше усмотрение'; Note = 'это автообновление: если отключить, программа будет обновляться только при запуске или вручную — для браузеров лучше оставить' }
     }
     if ($hay -match $script:PckitStartupOff) {
         return [pscustomobject]@{ Advice = 'можно отключить'; Note = 'программа запустится сама, когда вы её откроете; Windows будет стартовать быстрее' }
@@ -88,8 +92,113 @@ function Get-PckitStartupEntries {
                         -ApprovedPath ('{0}:\{1}\StartupFolder' -f $fd.Hive, $approvedRoot) -Id ('{0}|StartupFolder|{1}' -f $fd.Hive, $f.Name)))
         }
     }
+    foreach ($t in @(Get-PckitStartupTasks)) { [void]$list.Add($t) }
     # без «запятой»: вызывающий код оборачивает результат в @() сам
     return @($list | Sort-Object -Property @{ Expression = { -not $_.Enabled } }, Name)
+}
+
+# ---- задачи планировщика: только сторонние (не из \Microsoft\), только вкл/выкл, без удаления
+
+function Get-PckitTaskTriggerText {
+    # понятное «когда запускается» по триггерам задачи
+    param($Task)
+    $parts = New-Object System.Collections.ArrayList
+    foreach ($tr in @($Task.Triggers)) {
+        if (-not $tr) { continue }
+        $cls = [string]$tr.CimClass.CimClassName
+        $txt = switch -Wildcard ($cls) {
+            '*LogonTrigger'        { 'при входе в Windows' }
+            '*BootTrigger'         { 'при включении ПК' }
+            '*DailyTrigger'        { 'каждый день' }
+            '*WeeklyTrigger'       { 'раз в неделю' }
+            '*MonthlyTrigger'      { 'раз в месяц' }
+            '*IdleTrigger'         { 'когда ПК простаивает' }
+            '*EventTrigger'        { 'по событию в системе' }
+            '*SessionStateChange*' { 'при разблокировке или подключении' }
+            '*RegistrationTrigger' { 'после установки задачи' }
+            '*TimeTrigger'         { 'по расписанию' }
+            default                { 'по расписанию' }
+        }
+        $rep = $null
+        try { $rep = [string]$tr.Repetition.Interval } catch { }
+        if ($rep -match '^PT(?:(\d+)H)?(?:(\d+)M)?$' -and ($matches[1] -or $matches[2])) {
+            $h = [int]$matches[1]; $m = [int]$matches[2]
+            $every = if ($h -and $m) { '{0} ч {1} мин' -f $h, $m } elseif ($h) { '{0} ч' -f $h } else { '{0} мин' -f $m }
+            $txt = ('{0}, потом каждые {1}' -f $txt, $every)
+        }
+        if (-not $parts.Contains($txt)) { [void]$parts.Add($txt) }
+    }
+    if ($parts.Count -eq 0) { return 'только вручную' }
+    return ($parts -join '; ')
+}
+
+function Get-PckitStartupTasks {
+    $list = New-Object System.Collections.ArrayList
+    $tasks = @()
+    try { $tasks = @(Get-ScheduledTask -ErrorAction Stop) } catch { return @() }
+    foreach ($t in $tasks) {
+        $tp = [string]$t.TaskPath
+        if ($tp -like '\Microsoft\*') { continue }
+        $full = $tp + [string]$t.TaskName
+        # такие имена не передать в schtasks через cmd без риска (откат идёт через cmd /c)
+        if ($full -match '["%^]') { continue }
+        $act = @($t.Actions | Where-Object { $_ -and $_.PSObject.Properties['Execute'] -and $_.Execute }) | Select-Object -First 1
+        $command = ''
+        if ($act) { $command = ('"{0}" {1}' -f ([string]$act.Execute).Trim('"'), [string]$act.Arguments).Trim() }
+        $exe = Get-PckitStartupExe -Command $command
+        $publisher = ''
+        $description = [string]$t.Description
+        if ($exe -and (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            try {
+                $vi = (Get-Item -LiteralPath $exe -ErrorAction Stop).VersionInfo
+                $publisher = [string]$vi.CompanyName
+                if (-not $description) { $description = [string]$vi.FileDescription }
+            } catch { }
+        }
+        # системные задачи Windows бывают и вне \Microsoft\ — их программа лежит в папке Windows
+        if ($exe -and $env:windir -and $exe.StartsWith($env:windir + '\', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $description = ($description -replace '\s+', ' ').Trim()
+        if ($description.Length -gt 160) { $description = $description.Substring(0, 157) + '…' }
+        $advice = Get-PckitStartupAdvice -Name ([string]$t.TaskName) -Exe $exe -Publisher $publisher -Task
+        [void]$list.Add([pscustomobject]@{
+                Id           = ('TASK|{0}' -f $full)
+                Kind         = 'task'
+                Name         = (([string]$t.TaskName) -replace '[_ ]?\{[0-9A-Fa-f-]{36}\}$', '')
+                Description  = $description
+                Command      = $command
+                Exe          = $exe
+                Exists       = [bool]($exe -and (Test-Path -LiteralPath $exe))
+                Publisher    = $publisher
+                Where        = ('планировщик: {0}' -f (Get-PckitTaskTriggerText -Task $t))
+                Admin        = $true
+                TaskPath     = $tp
+                TaskName     = [string]$t.TaskName
+                FullPath     = $full
+                ApprovedPath = ''
+                ApprovedName = ''
+                Enabled      = ([string]$t.State -ne 'Disabled')
+                Advice       = $advice.Advice
+                AdviceNote   = $advice.Note
+            })
+    }
+    return @($list)
+}
+
+function Set-PckitStartupTaskEnabled {
+    param($Entry, [bool]$Enabled, $Journal)
+    try {
+        if ($Enabled) {
+            Enable-ScheduledTask -TaskPath $Entry.TaskPath -TaskName $Entry.TaskName -ErrorAction Stop | Out-Null
+            $undo = 'schtasks /Change /TN "{0}" /DISABLE' -f $Entry.FullPath
+        } else {
+            Disable-ScheduledTask -TaskPath $Entry.TaskPath -TaskName $Entry.TaskName -ErrorAction Stop | Out-Null
+            $undo = 'schtasks /Change /TN "{0}" /ENABLE' -f $Entry.FullPath
+        }
+        if ($Journal) { Add-PckitCommandTracked -Journal $Journal -Undo $undo -Note ('задача {0}' -f $Entry.TaskName) }
+        return [pscustomobject]@{ Status = 'ok'; Message = '' }
+    } catch {
+        return [pscustomobject]@{ Status = 'fail'; Message = $_.Exception.Message }
+    }
 }
 
 function New-PckitStartupEntry {
@@ -135,6 +244,7 @@ function Get-PckitApprovedBytes {
 function Set-PckitStartupEnabled {
     param($Entry, [bool]$Enabled, $Journal)
     if ($Entry.Enabled -eq $Enabled) { return [pscustomobject]@{ Status = 'ok'; Message = 'уже так' } }
+    if ($Entry.PSObject.Properties['Kind'] -and $Entry.Kind -eq 'task') { return (Set-PckitStartupTaskEnabled -Entry $Entry -Enabled $Enabled -Journal $Journal) }
     try {
         $bytes = Get-PckitApprovedBytes -Enabled $Enabled
         if ($Journal) {
