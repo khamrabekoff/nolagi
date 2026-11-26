@@ -19,7 +19,7 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.2.0";
+        public const string Version = "1.3.0";
 
         [STAThread]
         public static void Main()
@@ -184,6 +184,7 @@ namespace Pckit
             await Task.Delay(400);
             root.Children.Remove(scanScreen);
             BuildShell();
+            InitFpsAny();
             AskConsentOnce();
             Telemetry.Send("start", null);
             await CheckUpdates();
@@ -1224,6 +1225,7 @@ namespace Pckit
                 if (MessageBox.Show(this, "Nolagi ещё работает. Закрыть всё равно?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;
             }
             base.OnClosing(e);
+            if (!e.Cancel) StopFpsAny();
             if (!e.Cancel && mon != null) { if (monTimer != null) monTimer.Stop(); mon.Dispose(); mon = null; }   // nvidia-smi не должен остаться жить
         }
 

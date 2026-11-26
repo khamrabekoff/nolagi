@@ -101,6 +101,96 @@ function Get-PckitResizableBar {
     }
 }
 
+# ---- Здоровье дисков (SMART): сбор данных. Только чтение; без админа данных меньше. Ошибка -> пусто.
+# Возвращает { Disks = [ { Name, Health, Operational, MediaType, SizeGb, Wear, Temp, ReadErrors } ], PredictFailure = $bool }
+function Get-PckitDiskHealthData {
+    $disks = New-Object System.Collections.ArrayList
+    $predict = $false
+    try {
+        foreach ($pd in @(Get-PhysicalDisk -ErrorAction Stop)) {
+            $rel = $null
+            try { $rel = $pd | Get-StorageReliabilityCounter -ErrorAction Stop } catch { $rel = $null }
+            $wear = $null; $temp = $null; $rerr = $null
+            if ($rel) {
+                if ($null -ne $rel.Wear) { $wear = [int]$rel.Wear }
+                if ($null -ne $rel.Temperature -and [int]$rel.Temperature -gt 0) { $temp = [int]$rel.Temperature }
+                if ($null -ne $rel.ReadErrorsUncorrected) { $rerr = [int64]$rel.ReadErrorsUncorrected }
+            }
+            [void]$disks.Add([pscustomobject]@{
+                    Name        = ([string]$pd.FriendlyName).Trim()
+                    Health      = [string]$pd.HealthStatus
+                    Operational = (@($pd.OperationalStatus) -join ', ')
+                    MediaType   = [string]$pd.MediaType
+                    SizeGb      = [math]::Round([double]$pd.Size / 1GB)
+                    Wear        = $wear
+                    Temp        = $temp
+                    ReadErrors  = $rerr
+                })
+        }
+    } catch { $disks.Clear() }
+    try {
+        $fp = @(Get-CimInstance -Namespace 'root\wmi' -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction Stop)
+        if (@($fp | Where-Object { $_.PredictFailure }).Count -gt 0) { $predict = $true }
+    } catch { $predict = $false }
+    return [pscustomobject]@{ Disks = $disks.ToArray(); PredictFailure = $predict }
+}
+
+# ---- Здоровье дисков: выводы по собранным данным (чистая функция, без обращения к системе)
+function Get-PckitDiskHealthFindings {
+    param($Data)
+
+    $out = New-Object System.Collections.ArrayList
+    try {
+        if (-not $Data) { return @() }
+        $disks = @($Data.Disks)
+        if ($disks.Count -eq 0 -and -not $Data.PredictFailure) { return @() }
+        $advice = 'Сохраните важные файлы (сделайте копию на другой диск или в облако) и замените диск, пока он не отказал.'
+        $problems = 0
+        $badNames = New-Object System.Collections.ArrayList
+
+        foreach ($d in $disks) {
+            $label = if ($d.Name) { [string]$d.Name } else { 'без названия' }
+            if ([string]$d.Health -eq 'Unhealthy') {
+                $problems++; [void]$badNames.Add($label)
+                [void]$out.Add((New-PckitFinding -Severity 'bad' -Title ('Диск {0} может скоро отказать' -f $label) `
+                            -Detail 'Windows считает состояние диска неисправным (SMART).' -Hint $advice))
+                continue
+            }
+            $isSsd = ([string]$d.MediaType -eq 'SSD')
+            if ($null -ne $d.Wear -and $d.Wear -ge 80 -and $isSsd) {
+                $problems++
+                [void]$out.Add((New-PckitFinding -Severity 'warn' -Title ('SSD {0} изношен на {1}%' -f $label, $d.Wear) `
+                            -Detail 'Ресурс записи SSD почти выработан: диск может начать сбоить.' `
+                            -Hint 'Сделайте резервную копию важных файлов и подумайте о замене диска.'))
+            }
+            elseif ([string]$d.Health -eq 'Warning') {
+                $problems++
+                [void]$out.Add((New-PckitFinding -Severity 'warn' -Title ('Диск {0}: есть предупреждение SMART' -f $label) `
+                            -Detail 'Windows видит у диска признаки износа или ошибок.' `
+                            -Hint 'Сделайте резервную копию важных файлов и следите за состоянием диска.'))
+            }
+            if ($null -ne $d.Temp -and $d.Temp -ge 60) {
+                $problems++
+                [void]$out.Add((New-PckitFinding -Severity 'warn' -Title ('Диск {0} горячий: {1} °C' -f $label, $d.Temp) `
+                            -Detail 'Выше 60 °C диск быстрее изнашивается и может сбрасывать скорость.' `
+                            -Hint 'Проверьте обдув корпуса и радиатор на M.2-диске.'))
+            }
+        }
+
+        if ($Data.PredictFailure -and $badNames.Count -eq 0) {
+            $problems++
+            [void]$out.Add((New-PckitFinding -Severity 'bad' -Title 'Диск может скоро отказать' `
+                        -Detail 'SMART предсказывает скорый отказ одного из дисков.' -Hint $advice))
+        }
+
+        if ($problems -eq 0 -and $disks.Count -gt 0) {
+            [void]$out.Add((New-PckitFinding -Severity 'ok' -Title 'Диски исправны (SMART)' `
+                        -Detail ('проверено дисков: {0}' -f $disks.Count)))
+        }
+    } catch { return @() }
+    return $out.ToArray()
+}
+
 function Get-PckitHealthReport {
     param([string]$ActionsDir)
 
@@ -171,6 +261,11 @@ function Get-PckitHealthReport {
     else {
         [void]$findings.Add((New-PckitFinding -Severity 'ok' -Title 'Места на диске достаточно' -Detail $machine.Disk))
     }
+
+    # ---- Здоровье дисков (SMART)
+    try {
+        foreach ($f in @(Get-PckitDiskHealthFindings -Data (Get-PckitDiskHealthData))) { if ($f) { [void]$findings.Add($f) } }
+    } catch { }
 
     # ---- Питание
     $balanced = '381b4222-f694-41f0-9685-ff5bb260df2e'
