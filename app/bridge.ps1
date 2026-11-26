@@ -107,7 +107,7 @@ try {
     }
 
     # команды, которые пишут журнал отката, — строго по одной: иначе две копии моста затрут записи друг друга
-    if ($Cmd -in 'apply', 'undo', 'undoall', 'startup-off', 'startup-on', 'bench-enable', 'dns-set') {
+    if ($Cmd -in 'apply', 'undo', 'undoall', 'startup-off', 'startup-on', 'bench-enable', 'dns-set', 'prio-set', 'prio-unset') {
         $journalLock = New-Object System.Threading.Mutex($false, 'Local\NolagiJournal')
         try { [void]$journalLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
     }
@@ -281,6 +281,24 @@ try {
                 Out-Msg @{ t = 'item'; id = [string]$a.Id; name = [string]$a.Name; ok = [bool]$r.Ok; msg = [string]$r.Message }
             }
             Out-Msg @{ t = 'result'; ok = $ok; failed = $failed }
+        }
+        'prio-list' {
+            $set = @(Get-PckitPriorityExes)
+            $games = @(Get-PckitSteamGames | ForEach-Object { [pscustomobject]@{ name = $_.Name; exe = $_.Exe; path = $_.Path; high = ($set -contains $_.Exe) } })
+            Out-Msg @{ t = 'result'; games = $games; high = $set }
+        }
+        { $_ -in 'prio-set', 'prio-unset' } {
+            $want = @(Get-IdList)
+            $high = ($Cmd -eq 'prio-set')
+            $journal = Read-PckitJournal
+            $ok = 0; $failed = 0
+            foreach ($exe in $want) {
+                $r = Set-PckitGamePriority -Exe ([string]$exe) -High $high -Journal $journal
+                if ($r.Ok) { $ok++ } else { $failed++ }
+                Out-Msg @{ t = 'item'; id = [string]$exe; name = [string]$exe; ok = [bool]$r.Ok; msg = [string]$r.Message }
+            }
+            if (-not (Test-PckitJournalEmpty -Journal $journal)) { [void](Save-PckitJournal -Journal $journal) }
+            Out-Msg @{ t = 'result'; ok = $ok; failed = $failed; undoCount = (Get-PckitJournalCount -Journal (Read-PckitJournal)) }
         }
         'fps-status' {
             Out-Msg @{
