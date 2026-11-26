@@ -576,7 +576,7 @@
       { "type": "hibernate", "state": "off" }
     ],
     "verify": [
-      { "type": "reg", "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power", "name": "HibernateEnabled", "value": 0 }
+      { "type": "hibernate" }
     ]
   },
   {

@@ -34,7 +34,7 @@ try {
     Assert-That 'id уникальны' ($ids.Count -eq @($ids | Select-Object -Unique).Count)
 
     $stepTypes = @('reg', 'regkv', 'powerplan', 'service', 'task', 'powercfg', 'hibernate', 'netpower', 'devreg', 'nvidia', 'cs2cfg', 'cs2launch', 'workgpu')
-    $verifyTypes = @('reg', 'regkv', 'powerplan', 'service', 'task', 'powercfg', 'netpower', 'devreg', 'nvidia', 'cs2cfg', 'cs2launch', 'workgpu')
+    $verifyTypes = @('reg', 'regkv', 'powerplan', 'service', 'task', 'powercfg', 'hibernate', 'netpower', 'devreg', 'nvidia', 'cs2cfg', 'cs2launch', 'workgpu')
 
     $bad = New-Object System.Collections.ArrayList
     foreach ($a in $actions) {
