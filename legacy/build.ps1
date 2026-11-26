@@ -1,14 +1,24 @@
 ﻿#Requires -Version 5.1
 # pckit | сборка одного файла dist\pckit-by-odilbek.cmd (загрузчик + ZIP в base64)
-# Запуск: powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+# Запуск: powershell -NoProfile -ExecutionPolicy Bypass -File .\legacy\build.ps1
+# Старая версия (до Nolagi). Свои файлы — в legacy\, общий движок (engine, data, recipes) — в корне репозитория.
+# Заодно проверяет синтаксис, UTF-8 BOM и JSON во всём репозитории.
 
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
-$dist = Join-Path $root 'dist'
-$template = Join-Path $root 'build\loader.template.cmd'
+$legacy = $PSScriptRoot
+$root = Split-Path -Parent $legacy
+$dist = Join-Path $legacy 'dist'
+$template = Join-Path $legacy 'build\loader.template.cmd'
 
-# что кладём в архив (всё остальное — сборка, тесты, состояние — не нужно пользователю)
-$include = @('pckit-ui.ps1', 'pckit.ps1', 'PCKIT.md', 'engine', 'data', 'recipes')
+# что кладём в архив: [папка, имя]; в архиве всё лежит рядом, как раньше (pckit-ui.ps1 + engine\ + data\ + recipes\)
+$include = @(
+    , @($legacy, 'pckit-ui.ps1')
+    , @($legacy, 'pckit.ps1')
+    , @($legacy, 'PCKIT.md')
+    , @($root, 'engine')
+    , @($root, 'data')
+    , @($root, 'recipes')
+)
 
 Add-Type -AssemblyName System.IO.Compression | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
@@ -32,20 +42,21 @@ if ($bad) { throw "сборка остановлена: ошибок $bad" }
 
 # 2. ZIP в памяти, имена записей через '/', фиксированная дата — одинаковые исходники дают одинаковый хэш
 $files = New-Object System.Collections.ArrayList
-foreach ($name in $include) {
-    $path = Join-Path $root $name
+foreach ($inc in $include) {
+    $base = $inc[0]; $name = $inc[1]
+    $path = Join-Path $base $name
     if (-not (Test-Path -LiteralPath $path)) { throw "нет $name" }
     if ((Get-Item -LiteralPath $path).PSIsContainer) {
-        foreach ($f in Get-ChildItem -LiteralPath $path -Recurse -File) { [void]$files.Add($f.FullName) }
-    } else { [void]$files.Add((Resolve-Path -LiteralPath $path).Path) }
+        foreach ($f in Get-ChildItem -LiteralPath $path -Recurse -File) { [void]$files.Add([pscustomobject]@{ Full = $f.FullName; Rel = ($f.FullName.Substring($base.Length).TrimStart('\', '/') -replace '\\', '/') }) }
+    } else { [void]$files.Add([pscustomobject]@{ Full = (Resolve-Path -LiteralPath $path).Path; Rel = $name }) }
 }
-$sorted = @($files | Sort-Object)
+$sorted = @($files | Sort-Object Rel)
 
 $memory = New-Object System.IO.MemoryStream
 $zip = New-Object System.IO.Compression.ZipArchive($memory, [System.IO.Compression.ZipArchiveMode]::Create, $true)
 try {
-    foreach ($full in $sorted) {
-        $rel = $full.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/'
+    foreach ($it in $sorted) {
+        $full = $it.Full; $rel = $it.Rel
         $entry = $zip.CreateEntry($rel, [System.IO.Compression.CompressionLevel]::Optimal)
         $entry.LastWriteTime = [DateTimeOffset]::new(2026, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
         $stream = $entry.Open()

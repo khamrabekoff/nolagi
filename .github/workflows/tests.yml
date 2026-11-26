@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   windows:
     # тесты рассчитаны на Windows PowerShell 5.1 — тот же, что у пользователей
@@ -11,9 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Сборка (проверка синтаксиса, BOM и JSON)
+      - name: Проверка синтаксиса, BOM и JSON (и сборка старого pckit)
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\legacy\build.ps1
+
+      - name: Сборка Nolagi.exe
+        # ключа сервера в CI нет — сборка без статистики, этого достаточно для проверки
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\app\build.ps1
 
       - name: Тесты движка
         shell: powershell
@@ -26,11 +34,11 @@ jobs:
           }
           if ($failed.Count) { Write-Host ("Упали: " + ($failed -join ', ')); exit 1 }
 
-      - name: Собранный файл
+      - name: Собранный Nolagi.exe (без статистики)
         uses: actions/upload-artifact@v4
         with:
-          name: pckit-by-odilbek
-          path: dist/
+          name: Nolagi-ci
+          path: dist/Nolagi.exe
 
   portable:
     # тесты отката и защиты профиля не зависят от Windows — быстрый прогон в PowerShell 7

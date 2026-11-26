@@ -475,6 +475,12 @@ namespace Pckit
             c.Children.Add(status);
             sp.Children.Add(Card(c));
             sp.Children.Add(new TextBlock { Text = "Вместе с сообщением отправляются ваш ник (" + (string.IsNullOrEmpty(cfg.Nick) ? "без ника" : cfg.Nick) + ") и версия программы.", FontSize = 12.5, Foreground = Res("Mut"), Margin = new Thickness(4, 10, 0, 0), TextWrapping = TextWrapping.Wrap });
+
+            // consent can be changed at any time, not only in the first-run dialog
+            var stats = new CheckBox { Style = St("Chk"), IsChecked = cfg.Consent, Margin = new Thickness(4, 18, 0, 0) };
+            stats.Content = new TextBlock { Text = "Отправлять автору статистику: ник, процессор, видеокарту, объём памяти, версию Windows и какие настройки применились. Подробно — в PRIVACY.md на странице программы.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 0, 0), FontSize = 13 };
+            stats.Click += (s, e) => { cfg.Consent = stats.IsChecked == true; cfg.Save(); };
+            sp.Children.Add(stats);
             SetPage(PageFrame("Написать автору", "Сообщение придёт автору Nolagi.", sp));
         }
 

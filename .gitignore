@@ -10,3 +10,10 @@ snapshots/
 
 app/obj/
 app/obj-dev/
+
+# собранные файлы — публикуются в Releases, в git не храним
+dist/
+legacy/dist/
+app/obj/
+app/obj-dev/
+!docs/images/*.png
