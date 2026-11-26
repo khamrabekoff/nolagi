@@ -67,6 +67,8 @@ namespace Pckit
 
     public class GameModeEngine
     {
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+
         readonly object sync = new object();
         static readonly int MySession = Process.GetCurrentProcess().SessionId;
         static readonly int MyPid = Process.GetCurrentProcess().Id;
@@ -75,6 +77,7 @@ namespace Pckit
         int gamePid;
         DateTime since;
         readonly List<string> closedNames = new List<string>();
+        readonly List<string> refusedNames = new List<string>();   // спросили «Сохранить?» — не трогаем
         readonly List<string> restart = new List<string>();                 // команды, которыми запустить закрытое обратно
         readonly Dictionary<int, Tuple<DateTime, ProcessPriorityClass>> lowered = new Dictionary<int, Tuple<DateTime, ProcessPriorityClass>>();
         int purges;
@@ -106,6 +109,7 @@ namespace Pckit
                         Process g = all.FirstOrDefault(p => p.Id == gamePid);
                         if (g == null || !string.Equals(ExeName(g), Game, StringComparison.OrdinalIgnoreCase)) { EndLocked(true); return; }
                         LowerAll(all, c);      // браузер, открытый посреди матча, тоже уступает игре
+                        if (lowered.Count != savedLowered) SavePending();
                         if (c.MemClean && MemPurge.Suits) MaybePurge();
                         Status = Describe();
                     }
@@ -123,10 +127,56 @@ namespace Pckit
         void Begin(Process game, string exe, Process[] all, GameModeConfig c)
         {
             Game = exe; gamePid = game.Id; since = DateTime.Now;
-            closedNames.Clear(); restart.Clear(); lowered.Clear(); purges = 0;
+            closedNames.Clear(); refusedNames.Clear(); restart.Clear(); lowered.Clear(); purges = 0;
             CloseApps(all, c);
             LowerAll(all, c);
+            SavePending();
             Status = Describe();
+        }
+
+        // ---- если Nolagi упадёт или его закроют через диспетчер задач посреди игры, при следующем запуске всё вернётся
+
+        static string PendingPath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Nolagi", "gamemode-pending.json"); } }
+        int savedLowered = -1;
+
+        void SavePending()
+        {
+            if (savedLowered == lowered.Count && restart.Count == 0 && lowered.Count == 0) return;
+            savedLowered = lowered.Count;
+            try
+            {
+                var low = lowered.Select(kv => (object)new Dictionary<string, object> {
+                    { "pid", kv.Key }, { "start", kv.Value.Item1.ToBinary().ToString(System.Globalization.CultureInfo.InvariantCulture) }, { "prio", (int)kv.Value.Item2 } }).ToArray();
+                Directory.CreateDirectory(Path.GetDirectoryName(PendingPath));
+                File.WriteAllText(PendingPath, J.Write(new Dictionary<string, object> { { "restart", restart.ToArray() }, { "lowered", low } }), new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        static void DropPending() { try { File.Delete(PendingPath); } catch { } }
+
+        /// Вызывается при старте Nolagi: вернуть то, что не вернул упавший прошлый запуск.
+        public static void RecoverAfterCrash()
+        {
+            try
+            {
+                if (!File.Exists(PendingPath)) return;
+                var d = J.Parse(File.ReadAllText(PendingPath, Encoding.UTF8));
+                DropPending();
+                foreach (var l in J.A(d, "lowered"))
+                {
+                    try
+                    {
+                        var start = DateTime.FromBinary(long.Parse(J.S(l, "start"), System.Globalization.CultureInfo.InvariantCulture));
+                        using (var p = Process.GetProcessById((int)J.N(l, "pid")))
+                            if (p.StartTime == start && p.PriorityClass == ProcessPriorityClass.BelowNormal) p.PriorityClass = (ProcessPriorityClass)(int)J.N(l, "prio");
+                    }
+                    catch { }
+                }
+                var cmds = J.Get(d, "restart") as object[];
+                if (cmds != null) foreach (var c in cmds) { string s = Convert.ToString(c); if (!string.IsNullOrEmpty(s)) Unelevated.Start(s); }
+            }
+            catch { }
         }
 
         void EndLocked(bool restartApps)
@@ -144,6 +194,7 @@ namespace Pckit
             lowered.Clear();
             if (restartApps) foreach (var cmd in restart) Unelevated.Start(cmd);
             restart.Clear();
+            DropPending(); savedLowered = -1;
             Game = null; gamePid = 0;
             Status = "Ждёт запуска игры.";
         }
@@ -154,6 +205,7 @@ namespace Pckit
             if (!GameRules.BuiltInGames.TryGetValue(Game, out name)) name = Path.GetFileNameWithoutExtension(Game);
             var parts = new List<string>();
             if (closedNames.Count > 0) parts.Add("закрыто: " + string.Join(", ", closedNames));
+            if (refusedNames.Count > 0) parts.Add("не закрыто, ждёт ответа в своём окне: " + string.Join(", ", refusedNames));
             if (lowered.Count > 0) parts.Add("понижен приоритет у " + lowered.Count + " " + Plural(lowered.Count, "процесса", "процессов", "процессов"));
             if (purges > 0) parts.Add("память очищена " + purges + " " + Plural(purges, "раз", "раза", "раз"));
             int min = (int)(DateTime.Now - since).TotalMinutes;
@@ -183,19 +235,26 @@ namespace Pckit
                 string cmd = ProcInfo.CommandLine(first.Id);
                 if (string.IsNullOrEmpty(cmd)) { string path = ProcInfo.ImagePath(first.Id); if (path != null) cmd = "\"" + path + "\""; }
                 string label = ProcInfo.Describe(ProcInfo.ImagePath(first.Id), grp.Key);
-                bool closed = false;
-                foreach (var p in procs) { try { if (p.MainWindowHandle != IntPtr.Zero) p.CloseMainWindow(); } catch { } }
-                var deadline = DateTime.Now.AddSeconds(3);
+                // сначала просим закрыться по-хорошему; силой — только то, у чего не осталось видимого окна
+                // (лаунчер ушёл в трей). Если программа показывает окно — например, «Сохранить изменения?», — не трогаем.
+                bool asked = false;
+                foreach (var p in procs) { try { if (p.MainWindowHandle != IntPtr.Zero) { p.CloseMainWindow(); asked = true; } } catch { } }
+                var deadline = DateTime.Now.AddSeconds(asked ? 5 : 0);
+                var alive = new List<Process>();
                 foreach (var p in procs)
                 {
                     try
                     {
                         int left = (int)Math.Max(0, (deadline - DateTime.Now).TotalMilliseconds);
-                        if (!p.WaitForExit(p.MainWindowHandle != IntPtr.Zero ? left : 0)) p.Kill();
-                        closed = true;
+                        if (!p.WaitForExit(left)) alive.Add(p);
                     }
                     catch { }
                 }
+                // решаем за всю программу сразу: убить помощников, пока главное окно спрашивает «Сохранить?», — значит сломать её
+                bool refused = alive.Any(p => { try { p.Refresh(); IntPtr w = p.MainWindowHandle; return w != IntPtr.Zero && IsWindowVisible(w); } catch { return false; } });
+                if (refused) { refusedNames.Add(label); continue; }
+                bool closed = alive.Count < procs.Count;
+                foreach (var p in alive) { try { p.Kill(); closed = true; } catch { } }
                 if (!closed) continue;
                 closedNames.Add(label);
                 if (cmd != null && !restart.Contains(cmd)) restart.Add(cmd);
@@ -334,6 +393,9 @@ namespace Pckit
             if (exe == null || !File.Exists(exe)) return;
             if (!SafeDir.Elevated) { TryPlain(exe, cmdLine); return; }   // dev-сборка и так без прав администратора
             if (WithShellToken(cmdLine, Path.GetDirectoryName(exe))) return;
+            // запасной путь через explorer запускает без прав администратора, но без аргументов (лаунчер может открыться окном) —
+            // пишем причину, чтобы такие случаи были видны в панели автора
+            Telemetry.Error("gamemode-restart", "fallback to explorer: " + Path.GetFileName(exe) + ", win32 " + lastError);
             try { Process.Start(new ProcessStartInfo("explorer.exe", "\"" + exe + "\"") { UseShellExecute = false }); } catch { }
         }
 
@@ -347,7 +409,16 @@ namespace Pckit
             catch { }
         }
 
+        static int lastError;
+
         static bool WithShellToken(string cmdLine, string dir)
+        {
+            bool ok = TryShellToken(cmdLine, dir);
+            if (!ok) lastError = Marshal.GetLastWin32Error();
+            return ok;
+        }
+
+        static bool TryShellToken(string cmdLine, string dir)
         {
             int pid;
             IntPtr shell = GetShellWindow();

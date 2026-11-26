@@ -32,7 +32,22 @@ namespace Pckit
 
             // одна копия: вторая (ярлык, пока Nolagi в трее) просто показывает окно первой
             bool tray = args.Contains("/tray"), first;
-            var single = new System.Threading.Mutex(true, "Local\\Nolagi.App" + (SafeDir.Elevated ? "" : ".dev"), out first);
+            bool dev = System.IO.Path.GetFileName(Assembly.GetExecutingAssembly().Location).IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0;
+            string mutexName = "Local\\Nolagi.App" + (dev ? ".dev" : "");
+            var single = new System.Threading.Mutex(true, mutexName, out first);
+            if (!first && !tray && Install.IsNewerDownload)
+            {
+                // скачали новую версию, а старая открыта (например, в трее): просим её выйти и ставим новую
+                try { System.Threading.EventWaitHandle.OpenExisting(Pckit.MainWindow.ExitEventName).Set(); } catch { }
+                bool got;
+                try { got = single.WaitOne(20000); } catch (System.Threading.AbandonedMutexException) { got = true; }
+                if (got)
+                {
+                    single.ReleaseMutex();
+                    if (Install.EnsureInstalled(args)) return;   // установлено и запущено из Program Files
+                    single = new System.Threading.Mutex(true, mutexName, out first);
+                }
+            }
             if (!first)
             {
                 if (!tray) try { System.Threading.EventWaitHandle.OpenExisting(Pckit.MainWindow.ShowEventName).Set(); } catch { }
@@ -171,6 +186,7 @@ namespace Pckit
             catch (Exception ex)
             {
                 MessageBox.Show("Не удалось распаковать файлы программы:\n" + ex.Message, "Nolagi", MessageBoxButton.OK, MessageBoxImage.Error);
+                reallyExit = true;   // настоящий выход, не в трей
                 Close();
                 return;
             }
@@ -183,6 +199,7 @@ namespace Pckit
             {
                 Telemetry.Error("scan", ex.Message);
                 MessageBox.Show("Не удалось проверить компьютер:\n" + ex.Message, "Nolagi", MessageBoxButton.OK, MessageBoxImage.Error);
+                reallyExit = true;   // настоящий выход, не в трей
                 Close();
                 return;
             }
@@ -428,6 +445,7 @@ namespace Pckit
                 return;
             }
             currentOv.Finished = true;
+            reallyExit = true;   // иначе OnClosing спрячет окно в трей и ничего не вернёт
             Application.Current.Shutdown();
         }
 

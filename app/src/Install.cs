@@ -66,6 +66,21 @@ namespace Pckit
             }
         }
 
+        /// Этот exe — скачанная версия новее установленной (а установленная, видимо, сейчас открыта).
+        public static bool IsNewerDownload
+        {
+            get
+            {
+                try
+                {
+                    if (!SafeDir.Elevated || IsInstalledCopy || !File.Exists(Exe)) return false;
+                    if (Path.GetFileName(Self).IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                    return new Version(App.Version) > new Version(FileVersionInfo.GetVersionInfo(Exe).FileVersion);
+                }
+                catch { return false; }
+            }
+        }
+
         static bool InstalledRunning()
         {
             int me = Process.GetCurrentProcess().Id;

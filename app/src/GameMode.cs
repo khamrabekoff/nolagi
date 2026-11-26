@@ -17,7 +17,9 @@ namespace Pckit
 {
     public partial class MainWindow
     {
-        public const string ShowEventName = "Local\\Nolagi.Show";
+        static readonly string DevSuffix = Path.GetFileName(System.Reflection.Assembly.GetExecutingAssembly().Location).IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0 ? ".dev" : "";
+        public static readonly string ShowEventName = "Local\\Nolagi.Show" + DevSuffix;   // вторая копия просит показать окно
+        public static readonly string ExitEventName = "Local\\Nolagi.Exit" + DevSuffix;   // скачанная новая версия просит выйти
 
         RadioButton navGame;
         readonly GameModeEngine gm = new GameModeEngine();
@@ -28,6 +30,7 @@ namespace Pckit
         System.Windows.Forms.ToolStripMenuItem trayGameItem;
         bool reallyExit, sessionEnding;
         bool startHidden, neverShown;
+        bool autoCache;   // последнее известное состояние автозапуска — чтобы галочка не мигала при перерисовке
 
         /// Вызывается из конструктора: запуск в трее и сигнал «покажись» от второй копии Nolagi.
         void InitInstance(bool hidden)
@@ -45,6 +48,14 @@ namespace Pckit
                 var ev = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
                 var t = new Thread(() => { while (true) { ev.WaitOne(); Dispatcher.BeginInvoke(new Action(ShowFromTray)); } }) { IsBackground = true };
                 t.Start();
+                var ex = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
+                var t2 = new Thread(() =>
+                {
+                    ex.WaitOne();
+                    // выходим по-настоящему: закрытые игровым режимом программы вернутся, приоритеты восстановятся
+                    Dispatcher.BeginInvoke(new Action(() => { reallyExit = true; Close(); }));
+                }) { IsBackground = true };
+                t2.Start();
             }
             catch { }
         }
@@ -52,8 +63,10 @@ namespace Pckit
         /// После построения окна: игровой режим, если он был включён.
         void InitGameMode()
         {
-            if (cfg.GameModeOn) StartGameMode();
             if (startHidden || cfg.GameModeOn) EnsureTray();
+            // сначала вернуть то, что не вернул прошлый запуск (если он упал посреди игры), потом следить за играми
+            Task.Run(() => GameModeEngine.RecoverAfterCrash())
+                .ContinueWith(t => Dispatcher.BeginInvoke(new Action(() => { if (cfg.GameModeOn) StartGameMode(); })));
         }
 
         GameModeConfig GmSnapshot()
@@ -214,10 +227,13 @@ namespace Pckit
             });
 
             // автозапуск
-            var auto = new CheckBox { Style = St("Chk"), Margin = new Thickness(0, 14, 0, 0), IsEnabled = Autostart.Available };
-            bool autoOn = false;
-            try { autoOn = Autostart.On; } catch { }
-            auto.IsChecked = autoOn;
+            var auto = new CheckBox { Style = St("Chk"), Margin = new Thickness(0, 14, 0, 0), IsEnabled = false, IsChecked = autoCache };
+            if (Autostart.Available)
+            {
+                // schtasks.exe — отдельный процесс: спрашиваем в фоне, чтобы вкладка не подвисала
+                Task.Run(() => { try { return Autostart.On; } catch { return false; } })
+                    .ContinueWith(t => Dispatcher.BeginInvoke(new Action(() => { autoCache = t.Result; auto.IsChecked = t.Result; auto.IsEnabled = true; })));
+            }
             auto.Content = new TextBlock { Text = "Запускать Nolagi вместе с Windows (сразу в трей)", Margin = new Thickness(8, 0, 0, 0) };
             var autoNote = new TextBlock { FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(30, 2, 0, 0) };
             autoNote.Text = Autostart.Available
@@ -229,7 +245,7 @@ namespace Pckit
                 auto.IsEnabled = false;
                 bool ok = await Task.Run(() => { try { return Autostart.Set(want); } catch { return false; } });
                 bool now = await Task.Run(() => { try { return Autostart.On; } catch { return false; } });
-                auto.IsChecked = now; auto.IsEnabled = true;
+                auto.IsChecked = now; auto.IsEnabled = true; autoCache = now;
                 if (!ok) { autoNote.Text = "Не получилось изменить автозапуск. Попробуйте ещё раз."; autoNote.Foreground = Res("Bad"); }
                 else if (want && !cfg.GameModeOn) { SetGameMode(true); on.IsChecked = true; }
             };
