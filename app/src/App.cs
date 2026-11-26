@@ -19,7 +19,7 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
 
         [STAThread]
         public static void Main()
@@ -1742,8 +1742,13 @@ namespace Pckit
             sp.Children.Add(nick);
             // opt-in: the box starts empty, and closing the window with X means «no»
             var agree = new CheckBox { Style = St("Chk"), IsChecked = false, Margin = new Thickness(0, 16, 0, 0) };
-            agree.Content = new TextBlock { Text = "Отправлять автору статистику: ник, модель процессора и видеокарты, объём памяти, версию Windows и какие настройки применены. Сервер также видит ваш IP-адрес. Файлы и пароли не отправляются. Можно не включать — программа работает так же.", TextWrapping = TextWrapping.Wrap, Width = 370, FontSize = 13 };
+            agree.Content = new TextBlock { Text = "Отправлять автору статистику: ник, модель процессора и видеокарты, объём памяти, версию Windows и какие настройки применены. Сервер также видит ваш IP-адрес. Файлы и пароли не отправляются. Можно не включать — программа работает так же. Изменить выбор можно на вкладке «Написать автору».", TextWrapping = TextWrapping.Wrap, Width = 370, FontSize = 13 };
             sp.Children.Add(agree);
+            sp.Children.Add(new TextBlock { Text = "При каждом запуске Nolagi проверяет обновления; сервер анонимно считает, сколько ПК открыли программу за день — без ника и без сохранения IP.", Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Margin = new Thickness(0, 12, 0, 0) });
+            // honest disclaimer: the program changes Windows settings
+            var warn = new Border { Background = Res("WarnSoft"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12, 10, 12, 10), Margin = new Thickness(0, 14, 0, 0) };
+            warn.Child = new TextBlock { Text = "Nolagi меняет настройки Windows. Перед изменениями создаётся точка восстановления, и любую настройку можно откатить во вкладке «Откат». Программа бесплатная и даётся «как есть»: пользуясь ею, вы соглашаетесь, что делаете это на свой риск.", TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Foreground = Res("Txt") };
+            sp.Children.Add(warn);
             bool confirmed = false;
             var ok = Btn("Продолжить", "Primary"); ok.HorizontalAlignment = HorizontalAlignment.Right; ok.Margin = new Thickness(0, 20, 0, 0); ok.IsDefault = true;
             ok.Click += (s, e) => { confirmed = true; dlg.Close(); };
