@@ -1,0 +1,28 @@
+name: Новая настройка или идея
+description: Предложить настройку, проверку или функцию
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что предлагаете
+      description: Что должна делать настройка и зачем она игроку.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: Как это сделать
+      description: Ключ реестра, служба, команда — если знаете.
+  - type: input
+    id: source
+    attributes:
+      label: Источник
+      description: Документация Microsoft, замер, известный проект. Без источника настройку сложно проверить.
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Безопасность
+      options:
+        - label: Это не отключает Защитник, UAC, VBS, обновления безопасности и не меняет загрузчик (иначе FACEIT/Vanguard могут не пустить в игру)
+          required: true

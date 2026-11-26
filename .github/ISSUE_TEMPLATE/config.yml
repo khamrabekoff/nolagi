@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Уязвимость
+    url: https://github.com/khamrabekoff/nolagi/security/advisories/new
+    about: Сообщите закрыто, не в открытом issue.
+  - name: Скачать Nolagi
+    url: https://github.com/khamrabekoff/nolagi/releases/latest
+    about: Последняя версия программы.
