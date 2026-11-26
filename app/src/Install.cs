@@ -130,6 +130,7 @@ namespace Pckit
             if (answer != MessageBoxResult.Yes) return;
 
             foreach (var l in new[] { StartLnk, DesktopLnk }) { try { if (File.Exists(l)) File.Delete(l); } catch { } }
+            Autostart.Remove();
             try { Registry.LocalMachine.DeleteSubKeyTree(UninstallKey, false); } catch { }
             // scripts unpacked from the exe; the undo journal lives in %ProgramData%\pckit and is kept
             try

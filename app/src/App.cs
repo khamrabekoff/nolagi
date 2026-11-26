@@ -1,4 +1,4 @@
-﻿// Nolagi.exe - window and screens. Layout in code, styles in Theme.xaml.
+// Nolagi.exe - window and screens. Layout in code, styles in Theme.xaml.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,7 +19,7 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.3.0";
+        public const string Version = "1.4.0";
 
         [STAThread]
         public static void Main()
@@ -29,6 +29,15 @@ namespace Pckit
             var args = Environment.GetCommandLineArgs().Skip(1).Select(a => a.ToLowerInvariant()).ToArray();
             if (args.Contains("/uninstall")) { Install.Uninstall(); return; }
             if (Install.EnsureInstalled(args)) return;   // copied to Program Files and started from there
+
+            // одна копия: вторая (ярлык, пока Nolagi в трее) просто показывает окно первой
+            bool tray = args.Contains("/tray"), first;
+            var single = new System.Threading.Mutex(true, "Local\\Nolagi.App" + (SafeDir.Elevated ? "" : ".dev"), out first);
+            if (!first)
+            {
+                if (!tray) try { System.Threading.EventWaitHandle.OpenExisting(Pckit.MainWindow.ShowEventName).Set(); } catch { }
+                return;
+            }
 
             var app = new App();
             app.ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -40,7 +49,8 @@ namespace Pckit
             };
             using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Theme.xaml"))
                 app.Resources = (ResourceDictionary)XamlReader.Load(s);
-            app.Run(new MainWindow());
+            app.Run(new MainWindow(tray));
+            GC.KeepAlive(single);
         }
     }
 
@@ -84,7 +94,7 @@ namespace Pckit
         List<GroupBox2> groups = new List<GroupBox2>();
         int undoCount;
 
-        public MainWindow()
+        public MainWindow(bool hidden)
         {
             Title = "Nolagi";
             Width = 1240; Height = 740; MinWidth = 900; MinHeight = 600;
@@ -99,7 +109,8 @@ namespace Pckit
             Content = root;
             cfg = Settings.Load();
             Telemetry.Cfg = cfg;
-            Loaded += async (s, e) => await Start();
+            InitInstance(hidden);
+            Loaded += async (s, e) => { if (startHidden) Hide(); await Start(); };
         }
 
         static Brush Res(string k) { return (Brush)Application.Current.Resources[k]; }
@@ -185,7 +196,8 @@ namespace Pckit
             root.Children.Remove(scanScreen);
             BuildShell();
             InitFpsAny();
-            AskConsentOnce();
+            InitGameMode();
+            if (!neverShown) AskConsentOnce();   // при запуске в трей окно не показывается — спросим в следующий раз
             Telemetry.Send("start", null);
             await CheckUpdates();
         }
@@ -318,7 +330,9 @@ namespace Pckit
             navFeedback = NavItem("", "Написать автору", ShowFeedback);
             navMon = NavItem("", "Мониторинг", ShowMonitor);
             navMon.Unchecked += (s, e) => StopMonitor();
-            foreach (var n in new[] { navPc, navSet, navMon, navFps, navCheck, navClean, navApps, navStart, navUndo }) nav.Children.Add(n);
+            navGame = NavItem("", "Игровой режим", ShowGameMode);
+            navGame.Unchecked += (s, e) => gmStatus = null;
+            foreach (var n in new[] { navPc, navSet, navGame, navMon, navFps, navCheck, navClean, navApps, navStart, navUndo }) nav.Children.Add(n);
             nav.Children.Add(new Border { Height = 1, Background = Res("Line"), Margin = new Thickness(12, 10, 12, 10) });
             nav.Children.Add(navFeedback);
             shell.Children.Add(nav);
@@ -1220,12 +1234,14 @@ namespace Pckit
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            if (!Busy && HideToTrayInstead()) { e.Cancel = true; return; }
             if (Busy)
             {
                 if (MessageBox.Show(this, "Nolagi ещё работает. Закрыть всё равно?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;
             }
             base.OnClosing(e);
-            if (!e.Cancel) StopFpsAny();
+            if (!e.Cancel) { StopFpsAny(); ShutdownGameMode(); }
+            else reallyExit = false;
             if (!e.Cancel && mon != null) { if (monTimer != null) monTimer.Stop(); mon.Dispose(); mon = null; }   // nvidia-smi не должен остаться жить
         }
 

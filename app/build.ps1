@@ -32,7 +32,8 @@ $refs = @(
     (Join-Path $wpf 'PresentationFramework.dll'), (Join-Path $wpf 'PresentationCore.dll'), (Join-Path $wpf 'WindowsBase.dll'),
     (Join-Path $fw 'System.Xaml.dll'), (Join-Path $fw 'System.Web.Extensions.dll'),
     (Join-Path $fw 'System.IO.Compression.dll'), (Join-Path $fw 'System.IO.Compression.FileSystem.dll'),
-    (Join-Path $fw 'System.Core.dll'), (Join-Path $fw 'System.dll'), (Join-Path $fw 'System.Xml.dll')
+    (Join-Path $fw 'System.Core.dll'), (Join-Path $fw 'System.dll'), (Join-Path $fw 'System.Xml.dll'),
+    (Join-Path $fw 'System.Windows.Forms.dll'), (Join-Path $fw 'System.Drawing.dll')   # значок в трее
 )
 $exe = Join-Path $dist 'Nolagi.exe'
 $manifest = Join-Path $app 'app.manifest'
