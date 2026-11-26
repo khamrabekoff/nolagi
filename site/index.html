@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nolagi — поднять FPS в CS2 и Dota 2: бесплатная оптимизация Windows для игр</title>
-<meta name="description" content="Nolagi — бесплатная программа для Windows: настройки под ваш ПК для CS2, Dota 2 и других игр, замер FPS и 1% low в любой игре, мониторинг видеокарты, откат одной кнопкой. Безопасно для FACEIT и VAC.">
+<meta name="description" content="Nolagi — бесплатная программа для Windows: настройки под ваш ПК для CS2, Dota 2 и других игр, игровой режим, замер FPS и 1% low в любой игре, мониторинг видеокарты, откат одной кнопкой. Безопасно для FACEIT и VAC.">
 <link rel="canonical" href="https://khamrabekoff.github.io/nolagi/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#04060a">
@@ -27,7 +27,7 @@
   "name": "Nolagi",
   "operatingSystem": "Windows 10, Windows 11",
   "applicationCategory": "UtilitiesApplication",
-  "description": "Бесплатная оптимизация Windows для игр: настройки под ваш ПК для CS2 и Dota 2, замер FPS в любой игре, мониторинг, откат одной кнопкой.",
+  "description": "Бесплатная оптимизация Windows для игр: настройки под ваш ПК для CS2 и Dota 2, игровой режим, замер FPS в любой игре, мониторинг, откат одной кнопкой.",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "RUB" },
   "downloadUrl": "https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
@@ -45,6 +45,8 @@
       "acceptedAnswer": { "@type": "Answer", "text": "Да. Каждое изменение записывается в журнал: на вкладке «Откат» можно вернуть одну настройку или все сразу. Перед применением создаётся точка восстановления Windows." } },
     { "@type": "Question", "name": "Сколько FPS прибавит Nolagi?",
       "acceptedAnswer": { "@type": "Answer", "text": "Зависит от ПК: на системе, которую никто не настраивал, обычно заметно ровнее кадры и выше 1% low, на уже настроенной — немного. Поэтому в программе есть замер: сравните FPS до и после." } },
+    { "@type": "Question", "name": "Что делает игровой режим?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Пока идёт CS2, Dota 2 или игра, которую вы добавили, Nolagi закрывает выбранные программы (например, лаунчеры и OneDrive) и понижает приоритет другим (браузеру). После игры закрытые программы запускаются снова, приоритеты возвращаются. Steam, FACEIT и античиты не трогаются никогда." } },
     { "@type": "Question", "name": "Почему Windows пишет «Windows защитила ваш компьютер»?",
       "acceptedAnswer": { "@type": "Answer", "text": "Так бывает со всеми бесплатными программами без платной цифровой подписи. Нажмите «Подробнее», затем «Выполнить в любом случае». Код программы открыт на GitHub." } }
   ]
@@ -161,7 +163,13 @@ h2{font:700 clamp(30px,3.8vw,50px)/1.08 var(--display);letter-spacing:-.02em;mar
 /* бенто */
 .bento{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
 .b-1{grid-column:span 7;grid-row:span 2}.b-2{grid-column:span 5}.b-3{grid-column:span 5}
-.b-4{grid-column:span 4}.b-5{grid-column:span 4}.b-6{grid-column:span 4}
+.b-4{grid-column:span 4}.b-5{grid-column:span 4}.b-6{grid-column:span 4}.b-7{grid-column:span 12}
+.gm{display:grid;grid-template-columns:1fr 1.1fr;gap:40px;align-items:center}
+.gm-rows{display:grid;gap:8px}
+.gm-rows div{display:flex;align-items:center;justify-content:space-between;gap:12px;font:500 13px var(--mono);color:var(--ink);padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line)}
+.gm-rows span{font:600 11.5px var(--mono);padding:5px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--mut);white-space:nowrap}
+.gm-rows .c{border-color:rgba(56,189,248,.4);color:var(--cy)}.gm-rows .l{border-color:rgba(52,211,153,.35);color:var(--em)}
+.gm-rows .lock{opacity:.7}
 .bento .shell{height:100%}
 .bento .core{height:100%;padding:28px;display:flex;flex-direction:column}
 .bento h3{font:700 20px/1.25 var(--display);letter-spacing:-.01em;margin:18px 0 8px}
@@ -246,7 +254,7 @@ footer a:hover{color:var(--ink)}
 @media (max-width:1060px){ .nav .links{display:none} .burger{display:block} .nav{gap:8px} }
 @media (max-width:980px){
   .hero .wrap,.split{grid-template-columns:1fr;gap:48px}
-  .b-1,.b-2,.b-3,.b-4,.b-5,.b-6{grid-column:span 12;grid-row:auto}
+  .b-1,.b-2,.b-3,.b-4,.b-5,.b-6,.b-7{grid-column:span 12;grid-row:auto}.gm{grid-template-columns:1fr;gap:24px}
   .never{grid-template-columns:1fr 1fr}.myths,.steps{grid-template-columns:1fr}
 }
 @media (max-width:767px){
@@ -292,7 +300,7 @@ footer a:hover{color:var(--ink)}
         <a class="btn btn-p" id="dl" href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe">Скачать для Windows<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg></span></a>
         <a class="btn btn-g" href="https://github.com/khamrabekoff/nolagi">Открытый код<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
       </div>
-      <div class="meta rv d4"><span id="ver">v1.3.0</span><span>Windows 10 / 11</span><span>≈ 400 КБ</span><span>GPL-3.0</span></div>
+      <div class="meta rv d4"><span id="ver">v1.4.0</span><span>Windows 10 / 11</span><span>≈ 450 КБ</span><span>GPL-3.0</span></div>
     </div>
 
     <div class="hud-wrap rv d2">
@@ -329,7 +337,7 @@ footer a:hover{color:var(--ink)}
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></div>
         <h3>Около 100 настроек под ваш компьютер</h3>
         <p>Windows, видеокарта, CS2 и Dota 2. Nolagi смотрит на процессор, видеокарту, память и монитор и отмечает «подходит вам» — включается всё одной кнопкой.</p>
-        <img class="shot" src="img/2-nastroyki.png" width="1240" height="740" loading="lazy" alt="Вкладка «Настройки» в Nolagi">
+        <img class="shot" src="img/2-nastroyki.png" width="1224" height="732" loading="lazy" alt="Вкладка «Настройки» в Nolagi">
       </div></div></div>
 
       <div class="b-2 rv d1"><div class="shell"><div class="core">
@@ -366,12 +374,25 @@ footer a:hover{color:var(--ink)}
         <p>Одна планка памяти, выключенный Resizable BAR, монитор не на своей частоте, здоровье дисков.</p>
         <div class="chips"><span class="chip">XMP</span><span class="chip">ReBAR</span><span class="chip">280 Гц</span><span class="chip">SMART</span></div>
       </div></div></div>
+      <div class="b-7 rv"><div class="shell"><div class="core"><div class="gm">
+        <div>
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="19" height="11" rx="4"/><path d="M7.5 10.5v4M5.5 12.5h4"/><circle cx="15.5" cy="11.5" r=".8"/><circle cx="17.5" cy="13.8" r=".8"/></svg></div>
+          <h3>Игровой режим</h3>
+          <p>Запустили игру — Nolagi закрывает лаунчеры и обновлялки, а браузер заставляет уступить процессор. Вышли из игры — всё возвращается как было. Что делать с каждой программой, решаете вы. На ПК с 16 ГБ и меньше — ещё и очистка «ждущей» памяти в момент нехватки.</p>
+        </div>
+        <div class="gm-rows">
+          <div>Epic Games Launcher<span class="c">закрыть</span></div>
+          <div>OneDrive<span class="c">закрыть</span></div>
+          <div>Google Chrome<span class="l">ниже приоритет</span></div>
+          <div>Discord<span>не трогать</span></div>
+          <div class="lock">Steam · FACEIT<span>не трогаются никогда</span></div>
+        </div>
+      </div></div></div></div>
     </div>
   </div>
 </section>
 
-<section id="fps">
-  <div class="wrap split">
+<section id="fps">  <div class="wrap split">
     <div class="rv">
       <span class="eyebrow">Замер FPS</span>
       <h2>Считает кадры, не трогая игру</h2>
@@ -381,7 +402,7 @@ footer a:hover{color:var(--ink)}
         <div class="key"><kbd>Ctrl+F11</kbd><p><b>Запись замера</b> прямо в игре — график по секундам и сравнение с прошлым разом.</p></div>
       </div>
     </div>
-    <div class="rv d1"><div class="shell"><div class="core"><img src="img/4-zamer-fps.png" width="1240" height="740" loading="lazy" alt="Вкладка «Замер FPS» в Nolagi"></div></div></div>
+    <div class="rv d1"><div class="shell"><div class="core"><img src="img/4-zamer-fps.png" width="1224" height="732" loading="lazy" alt="Вкладка «Замер FPS» в Nolagi"></div></div></div>
   </div>
 </section>
 
@@ -396,7 +417,7 @@ footer a:hover{color:var(--ink)}
       <div class="rv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Защитник и UAC</b>не выключает</div>
       <div class="rv d1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Обновления безопасности</b>не отключает</div>
       <div class="rv d2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>bcdedit и защиты CPU</b>не трогает</div>
-      <div class="rv d3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Драйверы и фон</b>не ставит, не висит</div>
+      <div class="rv d3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Драйверы ядра</b>не ставит</div>
       <div class="rv d4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>«+200% FPS»</b>не обещает</div>
     </div>
   </div>
@@ -412,7 +433,7 @@ footer a:hover{color:var(--ink)}
     <div class="myths">
       <div class="myth rv" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Отключите алгоритм Nagle — пинг станет ниже</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>CS2 работает по UDP, а Nagle касается только TCP. На пинг в игре не влияет.</p></div></div></div>
       <div class="myth rv d1" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Верните 20% интернета, которые забирает Windows</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Windows не резервирует 20% канала. Миф родом из Windows XP.</p></div></div></div>
-      <div class="myth rv d2" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Почистите оперативную память перед игрой</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Windows держит свободную память под кэш. Принудительная очистка — подгрузки с диска и фризы.</p></div></div></div>
+      <div class="myth rv d2" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Почистите оперативную память перед игрой</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Windows держит свободную память под кэш. Очистка по кнопке или по таймеру — подгрузки с диска и фризы. Nolagi чистит кэш, только когда памяти реально не хватает игре.</p></div></div></div>
       <div class="myth rv" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Включите все ядра в msconfig</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Эта галочка только ограничивает число ядер. Windows и так использует все.</p></div></div></div>
       <div class="myth rv d1" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>bcdedit: HPET и disabledynamictick уберут задержку</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>На современных ПК чаще ухудшает задержку и FPS.</p></div></div></div>
       <div class="myth rv d2" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Удаляйте папку Prefetch — всё будет быстрее</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Наоборот: первые запуски программ станут медленнее.</p></div></div></div>
@@ -441,6 +462,7 @@ footer a:hover{color:var(--ink)}
       <details><summary>Безопасно ли для FACEIT и VAC?<span class="pm"></span></summary><p>Да. Nolagi не ставит драйверы, не внедряется в игры и не выключает Защитник Windows, UAC и изоляцию ядра. Для CS2 используются только штатные команды игры и обычные настройки Windows и драйвера видеокарты.</p></details>
       <details><summary>Можно ли вернуть всё как было?<span class="pm"></span></summary><p>Да. Каждое изменение записывается в журнал: на вкладке «Откат» можно вернуть одну настройку или все сразу. Перед применением создаётся точка восстановления Windows.</p></details>
       <details><summary>Сколько FPS прибавит?<span class="pm"></span></summary><p>Зависит от компьютера. На системе, которую никто не настраивал, обычно заметно ровнее кадры и выше 1% low. На уже настроенной — немного. Поэтому в программе есть замер: проверьте сами, до и после.</p></details>
+      <details><summary>Что делает игровой режим?<span class="pm"></span></summary><p>Пока идёт CS2, Dota 2 или игра, которую вы добавили, Nolagi закрывает выбранные программы (лаунчеры, OneDrive) и понижает приоритет другим (браузеру). После игры закрытые программы запускаются снова, приоритеты возвращаются. Steam, FACEIT и античиты не трогаются никогда. Режим работает, пока Nolagi открыт или свёрнут в трей; автозапуск — по желанию.</p></details>
       <details><summary>Антивирус ругается — это вирус?<span class="pm"></span></summary><p>Нет. Некоторые антивирусы с «умными» эвристиками реагируют на программы, которые меняют настройки Windows и не подписаны платным сертификатом. Код Nolagi открыт: каждую настройку можно прочитать на GitHub.</p></details>
       <details><summary>Что программа отправляет в интернет?<span class="pm"></span></summary><p>Проверку обновлений и анонимный счётчик запусков. Статистику о ПК — только с вашего согласия, её можно выключить в любой момент. Подробно — в <a href="https://github.com/khamrabekoff/nolagi/blob/main/PRIVACY.md">PRIVACY.md</a>.</p></details>
     </div>

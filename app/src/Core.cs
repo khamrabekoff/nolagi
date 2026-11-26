@@ -249,6 +249,11 @@ namespace Pckit
         public List<int> SeenNews = new List<int>();
         public bool OverlayOn;
         public int OverlayCorner = 1;   // 0 слева сверху, 1 справа сверху, 2 слева снизу, 3 справа снизу
+        public bool GameModeOn;
+        public bool MemCleanOn = true;
+        public bool TrayHintShown;
+        public List<string> Games = new List<string>();   // свои игры (exe); CS2 и Dota 2 узнаются всегда
+        public Dictionary<string, string> GameRules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // exe -> close / low / keep
 
         static string FilePath
         {
@@ -266,6 +271,13 @@ namespace Pckit
                     s.Id = J.S(d, "id"); s.Nick = J.S(d, "nick"); s.Consent = J.B(d, "consent"); s.Asked = J.B(d, "asked");
                     s.OverlayOn = J.B(d, "overlay");
                     if (J.Get(d, "overlayCorner") != null) s.OverlayCorner = Math.Max(0, Math.Min(3, (int)J.N(d, "overlayCorner")));
+                    s.GameModeOn = J.B(d, "gameMode");
+                    if (J.Get(d, "memClean") != null) s.MemCleanOn = J.B(d, "memClean");
+                    s.TrayHintShown = J.B(d, "trayHint");
+                    var games = J.Get(d, "games") as object[];
+                    if (games != null) foreach (var x in games) { string g = Convert.ToString(x).Trim().ToLowerInvariant(); if (g.EndsWith(".exe") && !s.Games.Contains(g)) s.Games.Add(g); }
+                    var rules = J.O(d, "gameRules");
+                    if (rules != null) foreach (var kv in rules) { string r = Convert.ToString(kv.Value); if (r == "close" || r == "low" || r == "keep") s.GameRules[kv.Key] = r; }
                     var seen = J.Get(d, "seenNews") as object[];
                     if (seen != null) foreach (var x in seen) { try { s.SeenNews.Add(Convert.ToInt32(x)); } catch { } }
                 }
@@ -280,7 +292,9 @@ namespace Pckit
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
-                File.WriteAllText(FilePath, J.Write(new Dictionary<string, object> { { "id", Id }, { "nick", Nick }, { "consent", Consent }, { "asked", Asked }, { "seenNews", SeenNews.ToArray() }, { "overlay", OverlayOn }, { "overlayCorner", OverlayCorner } }), new UTF8Encoding(false));
+                File.WriteAllText(FilePath, J.Write(new Dictionary<string, object> { { "id", Id }, { "nick", Nick }, { "consent", Consent }, { "asked", Asked }, { "seenNews", SeenNews.ToArray() }, { "overlay", OverlayOn }, { "overlayCorner", OverlayCorner },
+                    { "gameMode", GameModeOn }, { "memClean", MemCleanOn }, { "trayHint", TrayHintShown }, { "games", Games.ToArray() },
+                    { "gameRules", GameRules.ToDictionary(kv => kv.Key, kv => (object)kv.Value) } }), new UTF8Encoding(false));
             }
             catch { }
         }

@@ -142,6 +142,16 @@ function Get-PckitTaskByPath {
     } catch { return $null }
 }
 
+# «Попытка выполнить несанкционированную операцию» ничего не говорит человеку: объясняем, что случилось
+function Format-PckitRegError {
+    param($Err, [string]$Path)
+    $ex = $Err.Exception
+    if ($ex -is [System.UnauthorizedAccessException] -or $ex -is [System.Security.SecurityException]) {
+        return ('раздел реестра {0} закрыт от изменений — скорее всего, его права поменяла другая программа-«оптимизатор». Nolagi такие разделы не взламывает.' -f $Path)
+    }
+    return $ex.Message
+}
+
 function Get-PckitHibernateEnabled {
     $s = Get-PckitRegState -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' -Name 'HibernateEnabled'
     if ($s.Exists) { return ([int]$s.Value -ne 0) }
@@ -153,11 +163,23 @@ function Get-PckitNetPowerAdapters {
     $result = New-Object System.Collections.ArrayList
     $adapters = @()
     try { $adapters = @(Get-NetAdapter -Physical -ErrorAction Stop) } catch { $adapters = @() }
+    # Галочка «Разрешить отключение этого устройства для экономии энергии» — это MSPower_DeviceEnable в root\wmi.
+    # В новых сборках Windows 11 у Get/Set-NetAdapterPowerManagement больше нет параметра AllowComputerToTurnOffDevice,
+    # поэтому сначала WMI (работает везде), а командлет — только запасной путь.
+    $wmi = @()
+    try { $wmi = @(Get-CimInstance -Namespace 'root\wmi' -ClassName MSPower_DeviceEnable -ErrorAction Stop) } catch { $wmi = @() }
     foreach ($a in $adapters) {
+        $pnp = [string]$a.PnPDeviceID
+        $inst = $null
+        if ($pnp) { $inst = $wmi | Where-Object { ([string]$_.InstanceName).StartsWith($pnp, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1 }
+        if ($inst) {
+            [void]$result.Add([pscustomobject]@{ Name = [string]$a.Name; Allow = $(if ($inst.Enable) { 'Enabled' } else { 'Disabled' }); Wmi = $inst })
+            continue
+        }
         $pm = $null
         try { $pm = Get-NetAdapterPowerManagement -Name $a.Name -ErrorAction Stop } catch { $pm = $null }
-        if (-not $pm) { continue }
-        [void]$result.Add([pscustomobject]@{ Name = [string]$a.Name; Allow = [string]$pm.AllowComputerToTurnOffDevice })
+        if (-not $pm -or -not $pm.PSObject.Properties['AllowComputerToTurnOffDevice']) { continue }
+        [void]$result.Add([pscustomobject]@{ Name = [string]$a.Name; Allow = [string]$pm.AllowComputerToTurnOffDevice; Wmi = $null })
     }
     return $result.ToArray()
 }
@@ -305,6 +327,11 @@ function Test-PckitActionState {
             'devreg' {
                 $r = Test-PckitVerifyDevReg -Verify $v
                 $ok = [bool]$r.Ok; $detail = [string]$r.Detail
+            }
+            'hibernate' {
+                # то же правило, что и у шага: значения HibernateEnabled может не быть вовсе — тогда смотрим на hiberfil.sys
+                $ok = -not (Get-PckitHibernateEnabled)
+                if (-not $ok) { $detail = 'гибернация включена' }
             }
             'netpower' {
                 $bad = @(Get-PckitNetPowerAdapters | Where-Object { $_.Allow -eq 'Enabled' })
@@ -566,9 +593,15 @@ function Invoke-PckitStepNetPower {
     $msgs = New-Object System.Collections.ArrayList
     foreach ($a in $todo) {
         try {
-            Set-NetAdapterPowerManagement -Name $a.Name -AllowComputerToTurnOffDevice Disabled -ErrorAction Stop
-            if ($Journal) {
+            if ($a.Wmi) {
+                Set-CimInstance -InputObject $a.Wmi -Property @{ Enable = $false } -ErrorAction Stop
+                # без -f: фигурные скобки скрипта сломали бы форматирование
+                $cmd = "Get-CimInstance -Namespace 'root\wmi' -ClassName MSPower_DeviceEnable | Where-Object { `$_.InstanceName -eq '" + ([string]$a.Wmi.InstanceName).Replace("'", "''") + "' } | Set-CimInstance -Property @{ Enable = `$true }"
+            } else {
+                Set-NetAdapterPowerManagement -Name $a.Name -AllowComputerToTurnOffDevice Disabled -ErrorAction Stop
                 $cmd = "Set-NetAdapterPowerManagement -Name '{0}' -AllowComputerToTurnOffDevice Enabled" -f $a.Name.Replace("'", "''")
+            }
+            if ($Journal) {
                 $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
                 Add-PckitCommandTracked -Journal $Journal -Undo ('powershell -NoProfile -NonInteractive -EncodedCommand {0}' -f $b64) -Note ('сетевая карта {0}' -f $a.Name)
             }
@@ -621,7 +654,7 @@ function Invoke-PckitAction {
                         Add-PckitRegTracked -Journal $Journal -Path $path -Name $name -Value $value -Type $type
                         $status = 'ok'
                     } catch {
-                        $status = 'fail'; $failed++; $msg = $_.Exception.Message
+                        $status = 'fail'; $failed++; $msg = Format-PckitRegError -Err $_ -Path $path
                     }
                 } else {
                     $msg = ('{0} = {1}' -f $name, (@($value) -join ','))

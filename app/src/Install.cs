@@ -66,6 +66,21 @@ namespace Pckit
             }
         }
 
+        /// Этот exe — скачанная версия новее установленной (а установленная, видимо, сейчас открыта).
+        public static bool IsNewerDownload
+        {
+            get
+            {
+                try
+                {
+                    if (!SafeDir.Elevated || IsInstalledCopy || !File.Exists(Exe)) return false;
+                    if (Path.GetFileName(Self).IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                    return new Version(App.Version) > new Version(FileVersionInfo.GetVersionInfo(Exe).FileVersion);
+                }
+                catch { return false; }
+            }
+        }
+
         static bool InstalledRunning()
         {
             int me = Process.GetCurrentProcess().Id;
@@ -130,6 +145,7 @@ namespace Pckit
             if (answer != MessageBoxResult.Yes) return;
 
             foreach (var l in new[] { StartLnk, DesktopLnk }) { try { if (File.Exists(l)) File.Delete(l); } catch { } }
+            Autostart.Remove();
             try { Registry.LocalMachine.DeleteSubKeyTree(UninstallKey, false); } catch { }
             // scripts unpacked from the exe; the undo journal lives in %ProgramData%\pckit and is kept
             try
