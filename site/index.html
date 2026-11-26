@@ -2,20 +2,24 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nolagi — поднять FPS в CS2 и Dota 2: бесплатная оптимизация Windows для игр</title>
 <meta name="description" content="Nolagi — бесплатная программа для Windows: настройки под ваш ПК для CS2, Dota 2 и других игр, замер FPS и 1% low в любой игре, мониторинг видеокарты, откат одной кнопкой. Безопасно для FACEIT и VAC.">
 <link rel="canonical" href="https://khamrabekoff.github.io/nolagi/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#0b1220">
+<meta name="theme-color" content="#04060a">
+<meta name="color-scheme" content="dark">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="ru_RU">
 <meta property="og:site_name" content="Nolagi">
-<meta property="og:title" content="Nolagi — бесплатное ускорение Windows для игр">
-<meta property="og:description" content="Настройки под ваш ПК, FPS в любой игре, откат одной кнопкой. Безопасно для FACEIT и VAC.">
+<meta property="og:title" content="Nolagi — больше FPS и меньше фризов в CS2 и Dota 2">
+<meta property="og:description" content="Бесплатно. Настройки под ваш ПК, FPS в любой игре, откат одной кнопкой. Без драйверов, безопасно для FACEIT и VAC.">
 <meta property="og:url" content="https://khamrabekoff.github.io/nolagi/">
 <meta property="og:image" content="https://khamrabekoff.github.io/nolagi/img/1-moy-pk.png">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -40,200 +44,417 @@
     { "@type": "Question", "name": "Можно ли вернуть всё как было?",
       "acceptedAnswer": { "@type": "Answer", "text": "Да. Каждое изменение записывается в журнал: на вкладке «Откат» можно вернуть одну настройку или все сразу. Перед применением создаётся точка восстановления Windows." } },
     { "@type": "Question", "name": "Сколько FPS прибавит Nolagi?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Зависит от ПК: на системе, которую никто не настраивал, бывает заметный рост 1% low и меньше микрофризов, на уже настроенной — немного. Поэтому в программе есть замер: сравните FPS до и после." } },
+      "acceptedAnswer": { "@type": "Answer", "text": "Зависит от ПК: на системе, которую никто не настраивал, обычно заметно ровнее кадры и выше 1% low, на уже настроенной — немного. Поэтому в программе есть замер: сравните FPS до и после." } },
     { "@type": "Question", "name": "Почему Windows пишет «Windows защитила ваш компьютер»?",
       "acceptedAnswer": { "@type": "Answer", "text": "Так бывает со всеми бесплатными программами без платной цифровой подписи. Нажмите «Подробнее», затем «Выполнить в любом случае». Код программы открыт на GitHub." } }
   ]
 }
 </script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--txt:#111827;--mut:#5b6472;--line:#e4e7ec;--acc:#0067c0;--acc2:#38bdf8;--ok:#0f7b0f;--bad:#c42b1c;--hero:#0b1220;--heroTxt:#e8eef7;--heroMut:#9fb0c6}
-@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--txt:#e6edf3;--mut:#9aa6b2;--line:#283039;--acc:#4ea8ff;--ok:#4ac26b;--bad:#ff7b72}}
+:root{
+  --bg:#04060a; --ink:#eaf2fb; --mut:#8a97a8; --dim:#56627a;
+  --cy:#38bdf8; --cy2:#7dd3fc; --em:#34d399; --amb:#fbbf24; --red:#fb7185;
+  --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+  --shell:rgba(255,255,255,.035); --core:#0a0f17;
+  --ease:cubic-bezier(.32,.72,0,1); --spring:cubic-bezier(.22,1.2,.36,1);
+  --display:"Unbounded",system-ui,sans-serif; --body:"Manrope",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
-.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-header.hero{background:var(--hero);color:var(--heroTxt);padding:28px 0 0;overflow:hidden}
-.nav{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:20px;color:var(--heroTxt)}
-.brand img{width:34px;height:34px}
-.nav a.gh{color:var(--heroMut);font-size:15px}
-.hero-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center;padding:56px 0 64px}
-h1{font-size:44px;line-height:1.15;margin:0 0 16px;letter-spacing:-.5px}
-h1 span{color:var(--acc2)}
-.lead{font-size:19px;color:var(--heroMut);margin:0 0 28px;max-width:34em}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+::selection{background:rgba(56,189,248,.35)}
+.wrap{max-width:1200px;margin:0 auto;padding:0 28px}
+
+/* фон: свечение + сетка HUD + зерно (всё фиксировано и неинтерактивно) */
+.bg{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55}
+.orb.a{width:620px;height:620px;left:-160px;top:-220px;background:radial-gradient(circle,rgba(56,189,248,.55),transparent 65%)}
+.orb.b{width:520px;height:520px;right:-180px;top:30vh;background:radial-gradient(circle,rgba(52,211,153,.28),transparent 65%)}
+.orb.c{width:700px;height:700px;left:30%;bottom:-420px;background:radial-gradient(circle,rgba(56,189,248,.25),transparent 65%)}
+.grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 75%)}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:3;opacity:.05;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+main,header,footer{position:relative;z-index:1}
+
+/* навигация — плавающий стеклянный «остров» */
+.nav{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:6px;padding:6px 6px 6px 16px;border-radius:999px;background:rgba(8,12,19,.62);border:1px solid var(--line);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);box-shadow:0 10px 40px -10px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06)}
+.nav .logo{display:flex;align-items:center;gap:9px;font:700 15px var(--display);letter-spacing:.02em;margin-right:10px}
+.nav .logo img{width:26px;height:26px}
+.nav .links{display:flex;gap:2px}
+.nav .links a{white-space:nowrap;font-size:14px;color:var(--mut);padding:8px 13px;border-radius:999px;transition:color .5s var(--ease),background .5s var(--ease)}
+.nav .links a:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+.burger{display:none;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.06);position:relative;cursor:pointer}
+.burger i{position:absolute;left:12px;right:12px;height:1.5px;background:var(--ink);border-radius:2px;transition:transform .6s var(--ease),top .6s var(--ease)}
+.burger i:nth-child(1){top:16px}.burger i:nth-child(2){top:23px}
+.menu-open .burger i:nth-child(1){top:19.5px;transform:rotate(45deg)}
+.menu-open .burger i:nth-child(2){top:19.5px;transform:rotate(-45deg)}
+.overlay{position:fixed;inset:0;z-index:15;background:rgba(4,6,10,.82);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);display:flex;flex-direction:column;justify-content:center;padding:0 32px;gap:6px;opacity:0;pointer-events:none;transition:opacity .6s var(--ease)}
+.overlay a{font:700 34px/1.2 var(--display);opacity:0;transform:translateY(40px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.menu-open .overlay{opacity:1;pointer-events:auto}
+.menu-open .overlay a{opacity:1;transform:none}
+.menu-open .overlay a:nth-child(2){transition-delay:.06s}.menu-open .overlay a:nth-child(3){transition-delay:.12s}.menu-open .overlay a:nth-child(4){transition-delay:.18s}.menu-open .overlay a:nth-child(5){transition-delay:.24s}
+
+/* кнопки: «остров» со вложенной иконкой */
+.btn{--h:54px;display:inline-flex;align-items:center;gap:14px;height:var(--h);padding:0 7px 0 26px;border-radius:999px;font:600 16px var(--body);cursor:pointer;transition:transform .5s var(--spring),box-shadow .6s var(--ease),background .5s var(--ease)}
+.btn:active{transform:scale(.97)}
+.btn .k{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;transition:transform .6s var(--spring)}
+.btn:hover .k{transform:translate(2px,-1px) scale(1.06)}
+.btn .k svg{width:18px;height:18px}
+.btn-p{background:var(--cy);color:#03131f;box-shadow:0 0 0 1px rgba(125,211,252,.6),0 12px 40px -8px rgba(56,189,248,.65)}
+.btn-p:hover{box-shadow:0 0 0 1px rgba(186,230,253,.9),0 16px 60px -6px rgba(56,189,248,.85)}
+.btn-p .k{background:rgba(3,19,31,.14)}
+.btn-g{background:rgba(255,255,255,.04);border:1px solid var(--line2);color:var(--ink);padding-left:22px}
+.btn-g:hover{background:rgba(255,255,255,.07)}
+.btn-g .k{background:rgba(255,255,255,.07)}
+.nav .btn{--h:40px;font-size:14px;padding:0 5px 0 16px;gap:10px}
+.nav .btn .k{width:30px;height:30px}.nav .btn .k svg{width:14px;height:14px}
+
+/* метка над заголовком */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;border:1px solid rgba(56,189,248,.28);background:rgba(56,189,248,.07);font:500 11px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--cy2)}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--em);box-shadow:0 0 10px var(--em);animation:pulse 2.4s var(--ease) infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* «двойной кант»: внешняя рамка + внутреннее ядро */
+.shell{padding:7px;border-radius:30px;background:var(--shell);border:1px solid var(--line)}
+.core{border-radius:23px;background:linear-gradient(180deg,#0c121c,#080c13);box-shadow:inset 0 1px 0 rgba(255,255,255,.07);overflow:hidden;position:relative}
+
+/* hero */
+.hero{min-height:100dvh;display:flex;align-items:center;padding:130px 0 90px}
+.hero .wrap{display:grid;grid-template-columns:1.02fr .98fr;gap:64px;align-items:center;width:100%}
+h1{font:800 clamp(38px,4.6vw,64px)/1.04 var(--display);letter-spacing:-.025em;margin:26px 0 24px}
+h1 .glow{color:var(--cy);text-shadow:0 0 42px rgba(56,189,248,.55)}
+.lead{font-size:19px;color:var(--mut);max-width:31em;margin:0 0 36px}
+.lead b{color:var(--ink);font-weight:600}
 .cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.btn{display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:10px;font-weight:600;font-size:16px;border:1px solid transparent}
-.btn:hover{text-decoration:none}
-.btn-main{background:#0067c0;color:#fff}.btn-main:hover{background:#1975c5}
-.btn-sec{border-color:#2b3a52;color:var(--heroTxt)}.btn-sec:hover{background:#142036}
-.meta{margin-top:14px;font-size:14px;color:var(--heroMut)}
-.shot{border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.45);width:100%;height:auto;display:block;border:1px solid #1f2a3d}
-.badges{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
-.badge{font-size:13px;padding:4px 10px;border-radius:999px;background:#13233b;color:#9fd2ff;border:1px solid #1e3658}
-section{padding:72px 0}
-h2{font-size:32px;line-height:1.2;margin:0 0 12px;letter-spacing:-.3px}
-.sub{color:var(--mut);margin:0 0 36px;max-width:44em;font-size:17px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
-.card h3{margin:0 0 6px;font-size:18px}
-.card p{margin:0;color:var(--mut);font-size:15px}
-.ico{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:rgba(0,103,192,.1);color:var(--acc);margin-bottom:12px}
-.ico svg{width:22px;height:22px}
-.split{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
-.split.rev .txt{order:2}
-.list{list-style:none;padding:0;margin:0}
-.list li{padding:8px 0 8px 30px;position:relative;color:var(--txt)}
-.list li::before{content:"";position:absolute;left:4px;top:15px;width:14px;height:8px;border-left:2.5px solid var(--ok);border-bottom:2.5px solid var(--ok);transform:rotate(-45deg)}
-.list.no li::before{border:0;width:14px;height:14px;top:13px;background:linear-gradient(45deg,transparent 43%,var(--bad) 43%,var(--bad) 57%,transparent 57%),linear-gradient(-45deg,transparent 43%,var(--bad) 43%,var(--bad) 57%,transparent 57%);transform:none}
-.alt{background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.myths{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-.myth{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--bg)}
-.myth b{display:block;margin-bottom:4px}
-.myth span{color:var(--mut);font-size:15px}
-.steps{counter-reset:s;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 22px 22px 22px;position:relative}
-.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;margin-bottom:10px}
-.step p{margin:0;color:var(--mut);font-size:15px}
-details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:10px}
-summary{cursor:pointer;font-weight:600;list-style:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:28px;font:500 13px var(--mono);color:var(--dim)}
+.meta span::before{content:"▸ ";color:var(--cy)}
+
+/* HUD-панель с живым графиком */
+.hud .core{padding:22px 22px 18px}
+.hud-top{display:flex;justify-content:space-between;align-items:center;font:500 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.toggle{display:flex;padding:4px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line);position:relative}
+.toggle button{position:relative;z-index:1;border:0;background:none;color:var(--mut);font:600 12px var(--body);letter-spacing:0;text-transform:none;padding:7px 14px;border-radius:999px;cursor:pointer;transition:color .5s var(--ease)}
+.toggle button.on{color:#03131f}
+.toggle .pill{position:absolute;top:4px;bottom:4px;left:4px;border-radius:999px;background:var(--cy);transition:transform .7s var(--spring),width .7s var(--spring),background .6s var(--ease)}
+.toggle.before .pill{background:var(--amb)}
+.fps-row{display:flex;align-items:flex-end;gap:14px;margin:18px 0 4px}
+.fps-big{font:700 92px/0.9 var(--mono);letter-spacing:-.04em;color:var(--ink);font-variant-numeric:tabular-nums;transition:color .6s var(--ease),text-shadow .6s var(--ease)}
+.hud.after .fps-big{color:var(--em);text-shadow:0 0 40px rgba(52,211,153,.35)}
+.hud.before .fps-big{color:var(--amb);text-shadow:0 0 40px rgba(251,191,36,.25)}
+.fps-unit{font:600 14px var(--mono);color:var(--mut);padding-bottom:10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 16px}
+.stat{padding:11px 13px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.stat small{display:block;font:500 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.stat b{font:700 22px var(--mono);font-variant-numeric:tabular-nums}
+canvas#graph{width:100%;height:150px;display:block;border-radius:14px;background:linear-gradient(180deg,rgba(56,189,248,.05),transparent)}
+.hud-note{font:500 11px var(--mono);color:var(--dim);margin-top:10px;display:flex;justify-content:space-between;gap:10px}
+.hud-wrap{position:relative}
+.hud-wrap::before{content:"";position:absolute;inset:-40px;background:radial-gradient(closest-side,rgba(56,189,248,.18),transparent);z-index:-1}
+
+/* секции */
+section{padding:130px 0}
+.sec-head{max-width:760px;margin-bottom:56px}
+h2{font:700 clamp(30px,3.8vw,50px)/1.08 var(--display);letter-spacing:-.02em;margin:20px 0 16px}
+.sub{font-size:18px;color:var(--mut);margin:0}
+
+/* бенто */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+.b-1{grid-column:span 7;grid-row:span 2}.b-2{grid-column:span 5}.b-3{grid-column:span 5}
+.b-4{grid-column:span 4}.b-5{grid-column:span 4}.b-6{grid-column:span 4}
+.bento .shell{height:100%}
+.bento .core{height:100%;padding:28px;display:flex;flex-direction:column}
+.bento h3{font:700 20px/1.25 var(--display);letter-spacing:-.01em;margin:18px 0 8px}
+.bento p{margin:0;color:var(--mut);font-size:15.5px}
+.ico{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);color:var(--cy)}
+.ico svg{width:24px;height:24px}
+.shot{margin-top:24px;border-radius:14px;border:1px solid var(--line2);box-shadow:0 30px 60px -20px rgba(0,0,0,.8);transform:perspective(1400px) rotateX(6deg) rotateY(-8deg) rotate(1deg);transform-origin:left top;transition:transform 1s var(--ease)}
+.b-1:hover .shot{transform:perspective(1400px) rotateX(2deg) rotateY(-3deg)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:20px}
+.chip{font:500 12px var(--mono);padding:6px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--mut)}
+.chip.ok{border-color:rgba(52,211,153,.35);color:var(--em)}
+.mini-ov{margin-top:auto;align-self:flex-start;padding:10px 14px;border-radius:12px;background:rgba(4,8,14,.8);border:1px solid var(--line2);font:600 12px var(--mono);color:var(--mut);margin-top:22px}
+.mini-ov b{display:block;font:700 30px var(--mono);color:var(--em);line-height:1.1}
+.timeline{margin-top:22px;display:grid;gap:6px}
+.timeline div{display:flex;align-items:center;gap:10px;font:500 12.5px var(--mono);color:var(--mut);padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--line)}
+.timeline div i{width:7px;height:7px;border-radius:50%;background:var(--em)}
+.timeline div.undo i{background:var(--cy)}
+.gauge{margin-top:22px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gauge div{padding:10px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line);font:500 11px var(--mono);color:var(--dim)}
+.gauge b{display:block;font:700 18px var(--mono);color:var(--ink)}
+
+/* блок «до/после» на скриншоте FPS */
+.split{display:grid;grid-template-columns:.9fr 1.1fr;gap:72px;align-items:center}
+.keys{display:grid;gap:12px;margin-top:34px}
+.key{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:18px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+.key kbd{flex:none;font:700 13px var(--mono);padding:7px 10px;border-radius:9px;background:#0f1622;border:1px solid var(--line2);border-bottom-width:3px;color:var(--cy2)}
+.key p{margin:0;color:var(--mut)}.key b{color:var(--ink)}
+
+/* чего не делает */
+.never{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.never div{padding:22px 18px;border-radius:20px;border:1px solid rgba(251,113,133,.16);background:linear-gradient(180deg,rgba(251,113,133,.05),transparent);font-size:15px;color:var(--mut)}
+.never svg{width:26px;height:26px;color:var(--red);margin-bottom:12px}
+.never b{display:block;color:var(--ink);font-weight:600;margin-bottom:4px}
+
+/* мифы: карточка переворачивается */
+.myths{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.myth{perspective:1200px;min-height:190px;cursor:pointer}
+.myth .in{position:relative;height:100%;min-height:190px;transition:transform .9s var(--spring);transform-style:preserve-3d}
+.myth.flip .in{transform:rotateY(180deg)}
+.myth .f,.myth .b{position:absolute;inset:0;border-radius:22px;padding:24px;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:1px solid var(--line);display:flex;flex-direction:column}
+.myth .f{background:linear-gradient(180deg,#0c121c,#080c13)}
+.myth .b{transform:rotateY(180deg);background:linear-gradient(180deg,rgba(52,211,153,.09),#080c13);border-color:rgba(52,211,153,.25)}
+.tag{font:500 10px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--amb)}
+.myth .b .tag{color:var(--em)}
+.myth h4{font:700 18px/1.3 var(--display);margin:12px 0 0}
+.myth .b p{margin:12px 0 0;color:var(--ink);font-size:15px}
+.myth .hint{margin-top:auto;font:500 11px var(--mono);color:var(--dim)}
+
+/* установка */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step .core{padding:28px;height:100%}
+.step .n{font:700 13px var(--mono);color:var(--cy);letter-spacing:.1em}
+.step h3{font:700 19px var(--display);margin:14px 0 8px}
+.step p{margin:0;color:var(--mut);font-size:15.5px}
+
+/* вопросы */
+.faq{max-width:860px}
+details{border-bottom:1px solid var(--line);padding:6px 0}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:20px;align-items:center;padding:20px 0;font:600 18px var(--body)}
 summary::-webkit-details-marker{display:none}
-summary::after{content:"+";float:right;color:var(--mut);font-weight:400}
-details[open] summary::after{content:"–"}
-details p{margin:10px 0 0;color:var(--mut)}
-.final{text-align:center;background:var(--hero);color:var(--heroTxt)}
-.final .sub{color:var(--heroMut);margin-left:auto;margin-right:auto}
-.final .cta{justify-content:center}
-footer{padding:28px 0;color:var(--mut);font-size:14px}
-footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between}
-@media (max-width:860px){
-  h1{font-size:34px}.hero-grid,.split{grid-template-columns:1fr;gap:28px}.split.rev .txt{order:0}
-  .grid3,.steps{grid-template-columns:1fr}.myths{grid-template-columns:1fr}section{padding:52px 0}h2{font-size:26px}
+summary .pm{flex:none;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);position:relative;transition:transform .6s var(--spring),background .5s var(--ease)}
+summary .pm::before,summary .pm::after{content:"";position:absolute;left:10px;right:10px;top:16px;height:1.5px;background:var(--ink)}
+summary .pm::after{transform:rotate(90deg);transition:transform .6s var(--spring)}
+details[open] summary .pm{background:rgba(56,189,248,.12);transform:rotate(180deg)}
+details[open] summary .pm::after{transform:rotate(0)}
+details p{margin:0 0 22px;color:var(--mut);max-width:44em}
+details a{color:var(--cy)}
+
+/* финал */
+.final{text-align:center;padding:150px 0 120px}
+.final h2{font-size:clamp(36px,5vw,68px)}
+.final .cta{justify-content:center;margin-top:36px}
+footer{border-top:1px solid var(--line);padding:30px 0 40px;color:var(--dim);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 24px}
+footer a:hover{color:var(--ink)}
+
+/* появление при прокрутке */
+.rv{opacity:0;transform:translateY(48px);filter:blur(8px);transition:opacity 1s var(--ease),transform 1.1s var(--ease),filter 1s var(--ease)}
+.rv.in{opacity:1;transform:none;filter:none}
+.d1{transition-delay:.08s}.d2{transition-delay:.16s}.d3{transition-delay:.24s}.d4{transition-delay:.32s}
+
+@media (max-width:1060px){ .nav .links{display:none} .burger{display:block} .nav{gap:8px} }
+@media (max-width:980px){
+  .hero .wrap,.split{grid-template-columns:1fr;gap:48px}
+  .b-1,.b-2,.b-3,.b-4,.b-5,.b-6{grid-column:span 12;grid-row:auto}
+  .never{grid-template-columns:1fr 1fr}.myths,.steps{grid-template-columns:1fr}
+}
+@media (max-width:767px){
+  .wrap{padding:0 16px}
+  section{padding:88px 0}.hero{padding:110px 0 64px}
+  .nav{left:16px;right:16px;transform:none;justify-content:space-between}
+  .nav .links,.nav .btn{display:none}.burger{display:block}
+  .fps-big{font-size:68px}.stats{grid-template-columns:repeat(3,1fr)}
+  .never{grid-template-columns:1fr}
+  .shot{transform:none!important}
+  .lead{font-size:17px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .rv{opacity:1;transform:none;filter:none}
 }
 </style>
 </head>
 <body>
+<div class="bg" aria-hidden="true"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div><div class="grid-bg"></div></div>
+<div class="grain" aria-hidden="true"></div>
+
+<nav class="nav" aria-label="Главное меню">
+  <a class="logo" href="./"><img src="favicon.svg" alt="" width="26" height="26">NOLAGI</a>
+  <div class="links">
+    <a href="#features">Возможности</a><a href="#fps">Замер FPS</a><a href="#myths">Мифы</a><a href="#faq">Вопросы</a>
+  </div>
+  <a class="btn btn-p" href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe">Скачать<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg></span></a>
+  <button class="burger" aria-label="Меню" aria-expanded="false"><i></i><i></i></button>
+</nav>
+<div class="overlay" aria-hidden="true">
+  <a href="#features">Возможности</a><a href="#fps">Замер FPS</a><a href="#myths">Мифы</a><a href="#faq">Вопросы</a>
+  <a href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe" style="color:var(--cy)">Скачать →</a>
+</div>
 
 <header class="hero">
   <div class="wrap">
-    <nav class="nav">
-      <a class="brand" href="./"><img src="favicon.svg" alt="" width="34" height="34">Nolagi</a>
-      <a class="gh" href="https://github.com/khamrabekoff/nolagi">GitHub</a>
-    </nav>
-    <div class="hero-grid">
-      <div>
-        <div class="badges"><span class="badge">Бесплатно</span><span class="badge">Безопасно для FACEIT и VAC</span><span class="badge">Открытый код</span></div>
-        <h1>Больше FPS и меньше фризов <span>в CS2, Dota 2</span> и других играх</h1>
-        <p class="lead">Nolagi настраивает Windows и видеокарту под ваш компьютер, показывает FPS в любой игре и всё откатывает одной кнопкой. Без драйверов и без отключения защиты Windows.</p>
-        <div class="cta">
-          <a class="btn btn-main" id="dl" href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
-            Скачать для Windows
-          </a>
-          <a class="btn btn-sec" href="#how">Как установить</a>
-        </div>
-        <div class="meta"><span id="ver">Версия 1.3.0</span> · Windows 10 и 11 · около 400 КБ</div>
+    <div>
+      <span class="eyebrow rv"><span class="dot"></span>Бесплатно · CS2 · Dota 2 · FACEIT-safe</span>
+      <h1 class="rv d1">Больше FPS.<br><span class="glow">Меньше фризов.</span></h1>
+      <p class="lead rv d2">Nolagi настраивает Windows и видеокарту <b>под ваш компьютер</b>, показывает FPS в любой игре и <b>откатывает всё одной кнопкой</b>. Без драйверов и без отключения защиты Windows.</p>
+      <div class="cta rv d3">
+        <a class="btn btn-p" id="dl" href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe">Скачать для Windows<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg></span></a>
+        <a class="btn btn-g" href="https://github.com/khamrabekoff/nolagi">Открытый код<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
       </div>
-      <img class="shot" src="img/1-moy-pk.png" width="1240" height="740" alt="Главное окно Nolagi: процессор, видеокарта, память, монитор, найдены ли CS2 и Dota 2">
+      <div class="meta rv d4"><span id="ver">v1.3.0</span><span>Windows 10 / 11</span><span>≈ 400 КБ</span><span>GPL-3.0</span></div>
+    </div>
+
+    <div class="hud-wrap rv d2">
+      <div class="shell hud after" id="hud">
+        <div class="core">
+          <div class="hud-top">
+            <span>cs2.exe · live</span>
+            <div class="toggle" id="tg"><span class="pill"></span><button type="button" data-m="before">До</button><button type="button" data-m="after" class="on">После Nolagi</button></div>
+          </div>
+          <div class="fps-row"><span class="fps-big" id="fps">287</span><span class="fps-unit">FPS</span></div>
+          <div class="stats">
+            <div class="stat"><small>1% low</small><b id="low">201</b></div>
+            <div class="stat"><small>кадр, мс</small><b id="ft">3.5</b></div>
+            <div class="stat"><small>фризы</small><b id="fr">0</b></div>
+          </div>
+          <canvas id="graph" aria-label="График времени кадра" role="img"></canvas>
+          <div class="hud-note"><span>время кадра · последние 3 с</span><span>пример: у каждого ПК своё</span></div>
+        </div>
+      </div>
     </div>
   </div>
 </header>
 
 <main>
-<section>
+<section id="features">
   <div class="wrap">
-    <h2>Что умеет Nolagi</h2>
-    <p class="sub">Не «сто твиков из интернета», а только то, что подходит вашему ПК. У каждой настройки написано, что она делает и какой эффект даёт.</p>
-    <div class="grid3">
-      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></svg></div><h3>Настройки под ваш ПК</h3><p>Около 100 настроек Windows, видеокарты, CS2 и Dota 2. Отметка «подходит вам» — по вашему железу.</p></div>
-      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></div><h3>Откат одной кнопкой</h3><p>Любую настройку можно вернуть по одной или все сразу. Перед применением — точка восстановления Windows.</p></div>
-      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l5-6 4 4 8-9"/><path d="M14 6h6v6"/></svg></div><h3>FPS в любой игре</h3><p>Оверлей поверх игры и запись замера: средний FPS, 1% и 0.1% low, сравнение «до и после».</p></div>
-      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4"/></svg></div><h3>Мониторинг</h3><p>Температура и частоты видеокарты, загрузка ядер, память — и почему видеокарта сбрасывает частоты.</p></div>
-      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div><h3>Проверка ПК</h3><p>Одна планка памяти, выключенный Resizable BAR, монитор не на своей частоте, здоровье дисков.</p></div>
-      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></div><h3>Чистка и автозагрузка</h3><p>Временные файлы, кэши, лишние программы в автозагрузке и предустановленный мусор Windows.</p></div>
+    <div class="sec-head rv">
+      <span class="eyebrow">Возможности</span>
+      <h2>Только то, что работает на вашем ПК</h2>
+      <p class="sub">Не «сто твиков из интернета». У каждой настройки написано, что она делает и какой даёт эффект, а лишнее для вашего железа даже не предлагается.</p>
+    </div>
+    <div class="bento">
+      <div class="b-1 rv"><div class="shell"><div class="core">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></div>
+        <h3>Около 100 настроек под ваш компьютер</h3>
+        <p>Windows, видеокарта, CS2 и Dota 2. Nolagi смотрит на процессор, видеокарту, память и монитор и отмечает «подходит вам» — включается всё одной кнопкой.</p>
+        <img class="shot" src="img/2-nastroyki.png" width="1240" height="740" loading="lazy" alt="Вкладка «Настройки» в Nolagi">
+      </div></div></div>
+
+      <div class="b-2 rv d1"><div class="shell"><div class="core">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg></div>
+        <h3>Откат одной кнопкой</h3>
+        <p>Каждое изменение пишется в журнал. Вернуть можно одну настройку или все сразу, плюс точка восстановления Windows.</p>
+        <div class="timeline"><div><i></i>MSI для видеокарты · включено</div><div><i></i>Игровой режим · включено</div><div class="undo"><i></i>Откат · всё как было</div></div>
+      </div></div></div>
+
+      <div class="b-3 rv d2"><div class="shell"><div class="core">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 3l7.5 3.5v5.2c0 4.6-3.2 7.8-7.5 9.3-4.3-1.5-7.5-4.7-7.5-9.3V6.5z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.5"/></svg></div>
+        <h3>Безопасно для FACEIT и VAC</h3>
+        <p>Никаких драйверов, внедрения в игры и отключения Защитника, UAC или изоляции ядра.</p>
+        <div class="chips"><span class="chip ok">без драйверов</span><span class="chip ok">без инъекций</span><span class="chip ok">открытый код</span></div>
+      </div></div></div>
+
+      <div class="b-4 rv"><div class="shell"><div class="core">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 17l5-6 4 4 9-10"/><path d="M15 5h6v6"/></svg></div>
+        <h3>FPS в любой игре</h3>
+        <p>Оверлей поверх игры и запись замера: средний FPS, 1% и 0.1% low.</p>
+        <div class="mini-ov">FPS<b>287</b>1% low 201 · 3.5 мс</div>
+      </div></div></div>
+
+      <div class="b-5 rv d1"><div class="shell"><div class="core">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="3.5" y="4.5" width="17" height="11" rx="2"/><path d="M8 19.5h8M12 15.5v4"/></svg></div>
+        <h3>Мониторинг</h3>
+        <p>Температура и частоты видеокарты, ядра процессора, память — и почему карта сбрасывает частоты.</p>
+        <div class="gauge"><div>GPU<b>64°C</b></div><div>ядро<b>1965</b></div><div>ватт<b>184</b></div></div>
+      </div></div></div>
+
+      <div class="b-6 rv d2"><div class="shell"><div class="core">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg></div>
+        <h3>Проверка ПК</h3>
+        <p>Одна планка памяти, выключенный Resizable BAR, монитор не на своей частоте, здоровье дисков.</p>
+        <div class="chips"><span class="chip">XMP</span><span class="chip">ReBAR</span><span class="chip">280 Гц</span><span class="chip">SMART</span></div>
+      </div></div></div>
     </div>
   </div>
 </section>
 
-<section class="alt">
+<section id="fps">
   <div class="wrap split">
-    <div class="txt">
-      <h2>Замер FPS без внедрения в игру</h2>
-      <p class="sub">Nolagi считает кадры через Windows — так же, как PresentMon. В процесс игры ничего не внедряется, поэтому античиты это не трогает.</p>
-      <ul class="list">
-        <li><b>Ctrl+F12</b> — FPS, 1% low и температура видеокарты поверх игры</li>
-        <li><b>Ctrl+F11</b> — запись замера прямо в игре</li>
-        <li>График по секундам и сравнение с прошлым замером</li>
-        <li>Карта «CS2 FPS Benchmark» — результат забирается сам</li>
-      </ul>
+    <div class="rv">
+      <span class="eyebrow">Замер FPS</span>
+      <h2>Считает кадры, не трогая игру</h2>
+      <p class="sub">Nolagi берёт данные у самой Windows — так же, как PresentMon. В процесс игры ничего не внедряется, античиту не на что ругаться.</p>
+      <div class="keys">
+        <div class="key"><kbd>Ctrl+F12</kbd><p><b>Оверлей поверх игры</b> — FPS, 1% low, время кадра и температура видеокарты в углу экрана.</p></div>
+        <div class="key"><kbd>Ctrl+F11</kbd><p><b>Запись замера</b> прямо в игре — график по секундам и сравнение с прошлым разом.</p></div>
+      </div>
     </div>
-    <img class="shot" src="img/4-zamer-fps.png" width="1240" height="740" loading="lazy" alt="Вкладка «Замер FPS» в Nolagi: оверлей и запись замера в любой игре">
+    <div class="rv d1"><div class="shell"><div class="core"><img src="img/4-zamer-fps.png" width="1240" height="740" loading="lazy" alt="Вкладка «Замер FPS» в Nolagi"></div></div></div>
   </div>
 </section>
 
 <section>
-  <div class="wrap split rev">
-    <div class="txt">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <span class="eyebrow">Принципы</span>
       <h2>Чего Nolagi не делает никогда</h2>
-      <p class="sub">Многие оптимизаторы «заодно» ослабляют защиту Windows. FPS от этого не растёт, а проблемы с античитом — бывают.</p>
-      <ul class="list no">
-        <li>Не выключает Защитник Windows, UAC и изоляцию ядра</li>
-        <li>Не отключает обновления безопасности</li>
-        <li>Не трогает загрузчик (bcdedit) и защиты процессора</li>
-        <li>Не ставит драйверы и не висит в фоне</li>
-        <li>Не «чистит оперативку» и не обещает +200% FPS</li>
-      </ul>
+      <p class="sub">Многие «оптимизаторы» заодно ослабляют защиту Windows. FPS от этого не растёт, а проблемы с античитом — бывают.</p>
     </div>
-    <img class="shot" src="img/2-nastroyki.png" width="1240" height="740" loading="lazy" alt="Вкладка «Настройки» в Nolagi: у каждой настройки описание и эффект">
+    <div class="never">
+      <div class="rv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Защитник и UAC</b>не выключает</div>
+      <div class="rv d1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Обновления безопасности</b>не отключает</div>
+      <div class="rv d2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>bcdedit и защиты CPU</b>не трогает</div>
+      <div class="rv d3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>Драйверы и фон</b>не ставит, не висит</div>
+      <div class="rv d4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><b>«+200% FPS»</b>не обещает</div>
+    </div>
   </div>
 </section>
 
-<section class="alt">
+<section id="myths">
   <div class="wrap">
-    <h2>Мифы, которые не поднимают FPS</h2>
-    <p class="sub">В программе есть отдельный раздел с объяснениями. Коротко:</p>
+    <div class="sec-head rv">
+      <span class="eyebrow">Мифы</span>
+      <h2>Это не поднимает FPS</h2>
+      <p class="sub">Советы из каждого второго гайда. Нажмите на карточку — там правда.</p>
+    </div>
     <div class="myths">
-      <div class="myth"><b>Отключить алгоритм Nagle</b><span>CS2 работает по UDP, а Nagle касается только TCP. На пинг в игре не влияет.</span></div>
-      <div class="myth"><b>«Вернуть 20% интернета»</b><span>Windows не резервирует 20% канала. Миф времён Windows XP.</span></div>
-      <div class="myth"><b>Очистка оперативной памяти</b><span>Windows держит свободную память под кэш. Принудительная очистка даёт подгрузки с диска и фризы.</span></div>
-      <div class="myth"><b>«Включить все ядра» в msconfig</b><span>Эта галочка только ограничивает число ядер. Windows и так использует все.</span></div>
-      <div class="myth"><b>bcdedit: HPET, dynamic tick</b><span>На современных ПК чаще ухудшает задержку и FPS.</span></div>
-      <div class="myth"><b>Чистка папки Prefetch</b><span>Наоборот замедляет первые запуски программ.</span></div>
+      <div class="myth rv" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Отключите алгоритм Nagle — пинг станет ниже</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>CS2 работает по UDP, а Nagle касается только TCP. На пинг в игре не влияет.</p></div></div></div>
+      <div class="myth rv d1" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Верните 20% интернета, которые забирает Windows</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Windows не резервирует 20% канала. Миф родом из Windows XP.</p></div></div></div>
+      <div class="myth rv d2" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Почистите оперативную память перед игрой</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Windows держит свободную память под кэш. Принудительная очистка — подгрузки с диска и фризы.</p></div></div></div>
+      <div class="myth rv" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Включите все ядра в msconfig</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Эта галочка только ограничивает число ядер. Windows и так использует все.</p></div></div></div>
+      <div class="myth rv d1" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>bcdedit: HPET и disabledynamictick уберут задержку</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>На современных ПК чаще ухудшает задержку и FPS.</p></div></div></div>
+      <div class="myth rv d2" tabindex="0"><div class="in"><div class="f"><span class="tag">Миф</span><h4>Удаляйте папку Prefetch — всё будет быстрее</h4><span class="hint">нажмите →</span></div><div class="b"><span class="tag">Правда</span><p>Наоборот: первые запуски программ станут медленнее.</p></div></div></div>
     </div>
   </div>
 </section>
 
-<section id="how">
+<section id="install">
   <div class="wrap">
-    <h2>Как установить</h2>
-    <p class="sub">Установка не нужна — один файл.</p>
+    <div class="sec-head rv">
+      <span class="eyebrow">Установка</span>
+      <h2>Три шага, один файл</h2>
+    </div>
     <div class="steps">
-      <div class="step"><b>Скачайте Nolagi.exe</b><p>Кнопка «Скачать» выше. Файл с официальной страницы проекта на GitHub.</p></div>
-      <div class="step"><b>Нажмите «Подробнее»</b><p>Windows покажет синее окно «Windows защитила ваш компьютер» — так бывает с бесплатными программами без платной подписи. Нажмите «Подробнее» → «Выполнить в любом случае».</p></div>
-      <div class="step"><b>Проверьте и примените</b><p>Nolagi проверит ПК и отметит подходящие настройки. Сделайте замер FPS до и после — увидите разницу.</p></div>
+      <div class="step rv"><div class="shell"><div class="core"><span class="n">01</span><h3>Скачайте Nolagi.exe</h3><p>С официальной страницы проекта на GitHub — кнопка вверху.</p></div></div></div>
+      <div class="step rv d1"><div class="shell"><div class="core"><span class="n">02</span><h3>«Подробнее» → «Выполнить»</h3><p>Синее окно «Windows защитила ваш компьютер» бывает у всех бесплатных программ без платной подписи.</p></div></div></div>
+      <div class="step rv d2"><div class="shell"><div class="core"><span class="n">03</span><h3>Замер → настройки → замер</h3><p>Nolagi проверит ПК и отметит подходящее. Сравните FPS до и после — цифры скажут сами.</p></div></div></div>
     </div>
   </div>
 </section>
 
-<section class="alt">
-  <div class="wrap">
-    <h2>Вопросы</h2>
-    <details><summary>Безопасно ли для FACEIT и VAC?</summary><p>Да. Nolagi не ставит драйверы, не внедряется в игры и не выключает Защитник Windows, UAC и изоляцию ядра. Для CS2 используются только штатные команды игры и настройки Windows и драйвера видеокарты.</p></details>
-    <details><summary>Можно ли вернуть всё как было?</summary><p>Да. Каждое изменение записывается в журнал: на вкладке «Откат» можно вернуть одну настройку или все сразу. Перед применением создаётся точка восстановления Windows.</p></details>
-    <details><summary>Сколько FPS прибавит?</summary><p>Зависит от компьютера. На системе, которую никто не настраивал, обычно заметно ровнее кадры и выше 1% low. На уже настроенной — немного. Поэтому в программе есть замер: проверьте сами, до и после.</p></details>
-    <details><summary>Антивирус ругается — это вирус?</summary><p>Нет. Некоторые антивирусы с «умными» эвристиками реагируют на программы, которые меняют настройки Windows и не подписаны платным сертификатом. Код Nolagi открыт: каждую настройку можно прочитать на GitHub.</p></details>
-    <details><summary>Что программа отправляет в интернет?</summary><p>Проверку обновлений и анонимный счётчик запусков. Статистику о ПК — только с вашего согласия, его можно выключить в любой момент. Подробно — в <a href="https://github.com/khamrabekoff/nolagi/blob/main/PRIVACY.md">PRIVACY.md</a>.</p></details>
+<section id="faq">
+  <div class="wrap faq">
+    <div class="sec-head rv"><span class="eyebrow">Вопросы</span><h2>Коротко о главном</h2></div>
+    <div class="rv">
+      <details><summary>Безопасно ли для FACEIT и VAC?<span class="pm"></span></summary><p>Да. Nolagi не ставит драйверы, не внедряется в игры и не выключает Защитник Windows, UAC и изоляцию ядра. Для CS2 используются только штатные команды игры и обычные настройки Windows и драйвера видеокарты.</p></details>
+      <details><summary>Можно ли вернуть всё как было?<span class="pm"></span></summary><p>Да. Каждое изменение записывается в журнал: на вкладке «Откат» можно вернуть одну настройку или все сразу. Перед применением создаётся точка восстановления Windows.</p></details>
+      <details><summary>Сколько FPS прибавит?<span class="pm"></span></summary><p>Зависит от компьютера. На системе, которую никто не настраивал, обычно заметно ровнее кадры и выше 1% low. На уже настроенной — немного. Поэтому в программе есть замер: проверьте сами, до и после.</p></details>
+      <details><summary>Антивирус ругается — это вирус?<span class="pm"></span></summary><p>Нет. Некоторые антивирусы с «умными» эвристиками реагируют на программы, которые меняют настройки Windows и не подписаны платным сертификатом. Код Nolagi открыт: каждую настройку можно прочитать на GitHub.</p></details>
+      <details><summary>Что программа отправляет в интернет?<span class="pm"></span></summary><p>Проверку обновлений и анонимный счётчик запусков. Статистику о ПК — только с вашего согласия, её можно выключить в любой момент. Подробно — в <a href="https://github.com/khamrabekoff/nolagi/blob/main/PRIVACY.md">PRIVACY.md</a>.</p></details>
+    </div>
   </div>
 </section>
 
 <section class="final">
-  <div class="wrap">
-    <h2>Попробуйте на своём ПК</h2>
-    <p class="sub">Бесплатно, без регистрации и рекламы. Не понравится — «Откат» вернёт всё как было.</p>
+  <div class="wrap rv">
+    <span class="eyebrow"><span class="dot"></span>Бесплатно навсегда</span>
+    <h2>Проверьте на своём ПК</h2>
+    <p class="sub">Без регистрации и рекламы. Не понравится — «Откат» вернёт всё как было.</p>
     <div class="cta">
-      <a class="btn btn-main" href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe">Скачать Nolagi</a>
-      <a class="btn btn-sec" href="https://github.com/khamrabekoff/nolagi">Исходный код</a>
+      <a class="btn btn-p" href="https://github.com/khamrabekoff/nolagi/releases/latest/download/Nolagi.exe">Скачать Nolagi<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg></span></a>
+      <a class="btn btn-g" href="https://github.com/khamrabekoff/nolagi">GitHub<span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
     </div>
   </div>
 </section>
@@ -241,17 +462,114 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-bet
 
 <footer>
   <div class="wrap">
-    <span>Nolagi · открытый код, лицензия GPL-3.0</span>
+    <span>Nolagi · открытый код, GPL-3.0</span>
     <span><a href="https://github.com/khamrabekoff/nolagi">GitHub</a> · <a href="https://github.com/khamrabekoff/nolagi/blob/main/CHANGELOG.md">Что нового</a> · <a href="https://github.com/khamrabekoff/nolagi/blob/main/PRIVACY.md">Приватность</a></span>
   </div>
 </footer>
 
 <script>
-// номер последней версии с GitHub (если не ответит — остаётся написанный выше)
-fetch("https://api.github.com/repos/khamrabekoff/nolagi/releases/latest")
-  .then(function (r) { return r.ok ? r.json() : null; })
-  .then(function (d) { if (d && d.tag_name) document.getElementById("ver").textContent = "Версия " + d.tag_name.replace(/^nolagi-/, ""); })
-  .catch(function () {});
+(function () {
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // появление при прокрутке
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+  document.querySelectorAll(".rv").forEach(function (el) { io.observe(el); });
+
+  // меню на телефоне
+  var burger = document.querySelector(".burger");
+  function setMenu(open) { document.body.classList.toggle("menu-open", open); burger.setAttribute("aria-expanded", open); }
+  burger.addEventListener("click", function () { setMenu(!document.body.classList.contains("menu-open")); });
+  document.querySelectorAll(".overlay a").forEach(function (a) { a.addEventListener("click", function () { setMenu(false); }); });
+
+  // мифы переворачиваются
+  document.querySelectorAll(".myth").forEach(function (m) {
+    function t() { m.classList.toggle("flip"); }
+    m.addEventListener("click", t);
+    m.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); t(); } });
+  });
+
+  // HUD: живой график времени кадра «до / после»
+  var MODES = {
+    before: { fps: 214, jitter: 0.22, spikeEvery: 34, spike: 3.4, low: 142 },
+    after:  { fps: 287, jitter: 0.05, spikeEvery: 400, spike: 1.5, low: 201 }
+  };
+  var hud = document.getElementById("hud"), tg = document.getElementById("tg"), pill = tg.querySelector(".pill");
+  var elF = document.getElementById("fps"), elL = document.getElementById("low"), elT = document.getElementById("ft"), elR = document.getElementById("fr");
+  var cv = document.getElementById("graph"), ctx = cv.getContext("2d");
+  var mode = "after", frames = [], freezes = 0, shownFps = 287, auto = true, visible = true, n = 0;
+
+  function placePill() {
+    var on = tg.querySelector("button.on");
+    pill.style.width = on.offsetWidth + "px";
+    pill.style.transform = "translateX(" + (on.offsetLeft - 4) + "px)";
+    tg.classList.toggle("before", mode === "before");
+  }
+  function setMode(m, byUser) {
+    mode = m; if (byUser) auto = false;
+    tg.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.m === m); });
+    hud.classList.toggle("after", m === "after"); hud.classList.toggle("before", m === "before");
+    freezes = 0; placePill();
+  }
+  tg.addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) setMode(b.dataset.m, true); });
+  window.addEventListener("resize", placePill);
+  if (window.ResizeObserver) new ResizeObserver(function () { size(); draw(); }).observe(cv);
+
+  function size() {
+    var r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  function nextFrame() {
+    var m = MODES[mode], base = 1000 / m.fps;
+    var ft = base * (1 + (Math.random() - 0.5) * 2 * m.jitter);
+    if (Math.random() < 1 / m.spikeEvery) { ft = base * m.spike * (0.8 + Math.random() * 0.6); if (ft > 14) freezes++; }
+    frames.push(ft); if (frames.length > 180) frames.shift();
+  }
+  function draw() {
+    var w = cv.clientWidth, h = cv.clientHeight; ctx.clearRect(0, 0, w, h);
+    var max = 12, bw = w / 180, after = mode === "after";
+    ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.lineWidth = 1;
+    [4, 8].forEach(function (v) { var y = h - h * v / max; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); });
+    ctx.fillStyle = "rgba(138,151,168,.6)"; ctx.font = "500 10px JetBrains Mono, monospace";
+    ctx.fillText("8 мс", 6, h - h * 8 / max - 4); ctx.fillText("4 мс", 6, h - h * 4 / max - 4);
+    for (var i = 0; i < frames.length; i++) {
+      var v = frames[i], bh = Math.min(h, h * v / max), x = w - (frames.length - i) * bw;
+      ctx.fillStyle = v > 12 ? "rgba(251,113,133,.95)" : (after ? "rgba(52,211,153,.75)" : "rgba(251,191,36,.7)");
+      ctx.fillRect(x, h - bh, Math.max(1, bw - 1), bh);
+    }
+  }
+  function stats() {
+    var m = MODES[mode];
+    var target = m.fps + (Math.random() - 0.5) * (mode === "after" ? 6 : 26);
+    shownFps += (target - shownFps) * 0.35;
+    elF.textContent = Math.round(shownFps);
+    elL.textContent = Math.round(m.low + (Math.random() - 0.5) * 6);
+    elT.textContent = (1000 / shownFps).toFixed(1);
+    elR.textContent = freezes;
+  }
+  size(); for (var k = 0; k < 180; k++) nextFrame(); placePill(); draw(); stats();
+  new IntersectionObserver(function (es) { visible = es[0].isIntersecting; }).observe(hud);
+  if (!reduce) {
+    var last = 0, statT = 0, cycle = 0;
+    (function loop(t) {
+      requestAnimationFrame(loop);
+      if (!visible || document.hidden) { last = t; return; }
+      var dt = t - last; last = t; if (dt > 100) dt = 16;
+      for (var j = 0; j < 3; j++) nextFrame();
+      draw();
+      statT += dt; if (statT > 260) { statT = 0; stats(); }
+      cycle += dt; if (auto && cycle > 6000) { cycle = 0; setMode(mode === "after" ? "before" : "after", false); }
+    })(0);
+  }
+
+  // номер последней версии с GitHub
+  fetch("https://api.github.com/repos/khamrabekoff/nolagi/releases/latest")
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { if (d && d.tag_name) document.getElementById("ver").textContent = "v" + d.tag_name.replace(/^nolagi-/, ""); })
+    .catch(function () {});
+})();
 </script>
 </body>
 </html>
