@@ -266,7 +266,7 @@ function Invoke-PckitUndoCommand {
     $code = $LASTEXITCODE
     if ($code -eq 0) { return (& $res 'ok' '') }
 
-    if ($Undo -match '^schtasks /Change /TN "(.+)" /ENABLE$') {
+    if ($Undo -match '^schtasks /Change /TN "(.+)" /(ENABLE|DISABLE)$') {
         & schtasks /Query /TN $matches[1] 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { return (& $res 'skip' 'задачи больше нет') }
     }

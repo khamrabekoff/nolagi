@@ -79,6 +79,28 @@ function Get-PckitMachineSummary {
 }
 
 
+function Get-PckitResizableBar {
+    # $null = не NVIDIA или nvidia-smi нет; иначе { Gpu, Bar1Mb, Enabled, Supported }
+    $smi = Join-Path $env:windir 'System32\nvidia-smi.exe'
+    if (-not (Test-Path -LiteralPath $smi)) { return $null }
+    try {
+        $name = (& $smi --query-gpu=name --format=csv,noheader 2>$null | Select-Object -First 1)
+        $text = (& $smi -q -d MEMORY 2>$null) -join "`n"
+    } catch { return $null }
+    if ($LASTEXITCODE -ne 0 -or -not $text) { return $null }
+    $m = [regex]::Match($text, 'BAR1 Memory Usage\s+Total\s*:\s*(\d+)\s*MiB')
+    if (-not $m.Success) { return $null }
+    $bar1 = [int]$m.Groups[1].Value
+    $name = ([string]$name).Trim()
+    return [pscustomobject]@{
+        Gpu       = $name
+        Bar1Mb    = $bar1
+        Enabled   = ($bar1 -gt 256)
+        # ReBar есть у GeForce RTX 30-й серии и новее (RTX 20 и GTX его не поддерживают)
+        Supported = ($name -match 'RTX\s*[3-9]\d{3}\b')
+    }
+}
+
 function Get-PckitHealthReport {
     param([string]$ActionsDir)
 
@@ -119,6 +141,19 @@ function Get-PckitHealthReport {
             [void]$findings.Add((New-PckitFinding -Severity 'warn' -Title 'Планки памяти с разной частотой' `
                         -Detail ('Обнаружены частоты: {0} МГц. Система работает по самой медленной.' -f (@($machine.RamSpeeds) -join ', ')) `
                         -Hint 'Либо оставьте одинаковые планки, либо включите XMP и проверьте, что все держат одну частоту.'))
+        }
+    }
+
+    # ---- Resizable BAR (только NVIDIA: размер BAR1 из nvidia-smi; 256 МБ = выключен)
+    $rebar = Get-PckitResizableBar
+    if ($rebar) {
+        if ($rebar.Enabled) {
+            [void]$findings.Add((New-PckitFinding -Severity 'ok' -Title 'Resizable BAR включён' -Detail ('Процессор видит всю память видеокарты: {0} МБ.' -f $rebar.Bar1Mb)))
+        }
+        elseif ($rebar.Supported) {
+            [void]$findings.Add((New-PckitFinding -Severity 'warn' -Title 'Resizable BAR выключен' `
+                        -Detail ('{0} умеет Resizable BAR, но процессор видит только {1} МБ её памяти. В части новых игр это минус 5–15% fps.' -f $rebar.Gpu, $rebar.Bar1Mb) `
+                        -Hint 'Включается в BIOS материнской платы: «Above 4G Decoding» и «Re-Size BAR Support» (у AMD — «Smart Access Memory»), CSM должен быть выключен. Nolagi сам BIOS не меняет.'))
         }
     }
 
@@ -215,7 +250,7 @@ function Get-PckitHealthReport {
                             -Hint 'Свежий драйвер часто даёт больше, чем любые твики реестра.' -Link 'pckit:driver'))
             }
             else {
-                [void]$findings.Add((New-PckitFinding -Severity 'ok' -Title ('Драйвер видеокарты не старый: {0:N0} дн.' -f $age) -Detail $machine.Gpu -Hint 'Есть ли версия новее — кнопка «Свежий ли драйвер?» (спросит сайт NVIDIA).' -Link 'pckit:driver'))
+                [void]$findings.Add((New-PckitFinding -Severity 'ok' -Title ('Драйвер видеокарты не старый: {0:N0} дн.' -f $age) -Detail $machine.Gpu))
             }
         } catch { }
     }
@@ -313,7 +348,7 @@ function Get-PckitHealthReport {
     if ($journalCount -gt 0) {
         [void]$findings.Add((New-PckitFinding -Severity 'info' -Title ('В журнале {0} изменений — их можно отменить' -f $journalCount) `
                     -Detail ('журнал от {0}' -f $journal.created) `
-                    -Hint 'Кнопка «Отменить изменения» во вкладке «Вернуть» или «Настройки».'))
+                    -Hint 'Вкладка «Откат»: можно вернуть всё или по одной настройке.'))
     }
 
     $bad = @($findings | Where-Object { $_.Severity -eq 'bad' }).Count

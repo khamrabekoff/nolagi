@@ -107,7 +107,7 @@ try {
     }
 
     # команды, которые пишут журнал отката, — строго по одной: иначе две копии моста затрут записи друг друга
-    if ($Cmd -in 'apply', 'undo', 'undoall', 'startup-off', 'startup-on', 'bench-enable') {
+    if ($Cmd -in 'apply', 'undo', 'undoall', 'startup-off', 'startup-on', 'bench-enable', 'dns-set') {
         $journalLock = New-Object System.Threading.Mutex($false, 'Local\NolagiJournal')
         try { [void]$journalLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
     }
@@ -123,7 +123,7 @@ try {
             Out-Msg @{ t = 'step'; key = 'tweaks'; text = 'Текущие настройки Windows' }
             $rows = Get-ActionRows $actions $hw -Progress
             $j = Read-PckitJournal
-            Out-Msg @{ t = 'result'; hw = (Get-HwPayload $hw); actions = $rows; undoCount = (Get-PckitJournalCount -Journal $j) }
+            Out-Msg @{ t = 'result'; hw = (Get-HwPayload $hw); actions = $rows; undoCount = (Get-PckitJournalCount -Journal $j); myths = @($actions | Where-Object { $_.myth } | ForEach-Object { [pscustomobject]@{ title = [string]$_.title; what = [string]$_.what; effect = [string]$_.effect } }) }
         }
         'state' {
             $hw = Get-PckitHardwareProfile
@@ -150,7 +150,8 @@ try {
                     $fails = @($r.Results | Where-Object { $_.Status -eq 'fail' })
                     $skips = @($r.Results | Where-Object { $_.Status -eq 'skip' })
                     if ($fails.Count) { Out-Msg @{ t = 'item'; id = [string]$a.id; ok = $false; msg = (($fails | ForEach-Object { $_.Message }) -join '; ') } }
-                    elseif ($skips.Count) { Out-Msg @{ t = 'item'; id = [string]$a.id; ok = $false; msg = [string]$skips[0].Message } }
+                    # пропуск (службы или задачи нет на этом ПК) — не ошибка: итог решает проверка после применения
+                    elseif ($skips.Count) { Out-Msg @{ t = 'item'; id = [string]$a.id; ok = $true; msg = ('пропущено: {0}' -f (($skips | ForEach-Object { $_.Message }) -join '; ')) } }
                     else { Out-Msg @{ t = 'item'; id = [string]$a.id; ok = $true; msg = '' } }
                 } catch {
                     Out-Msg @{ t = 'item'; id = [string]$a.id; ok = $false; msg = $_.Exception.Message }
@@ -212,7 +213,10 @@ try {
         }
         'startup-list' {
             $rows = @(Get-PckitStartupEntries | ForEach-Object {
-                    [pscustomobject]@{ id = [string]$_.Id; name = [string]$_.Name; description = [string]$_.Description; publisher = [string]$_.Publisher; enabled = [bool]$_.Enabled; advice = [string]$_.Advice; adviceNote = [string]$_.AdviceNote }
+                    # окно ждёт off/keep/'' (движок отдаёт русский текст совета)
+                    $adv = switch ([string]$_.Advice) { 'можно отключить' { 'off' } 'нужно' { 'keep' } default { '' } }
+                    $kind = $(if ($_.PSObject.Properties['Kind'] -and $_.Kind) { [string]$_.Kind } else { 'app' })
+                    [pscustomobject]@{ id = [string]$_.Id; kind = $kind; name = [string]$_.Name; description = [string]$_.Description; publisher = [string]$_.Publisher; where = [string]$_.Where; enabled = [bool]$_.Enabled; advice = $adv; adviceNote = [string]$_.AdviceNote }
                 })
             Out-Msg @{ t = 'result'; items = $rows }
         }
@@ -230,6 +234,52 @@ try {
                 Out-Msg @{ t = 'item'; id = [string]$e.Id; name = [string]$e.Name; ok = ($r.Status -eq 'ok'); msg = [string]$r.Message }
             }
             if (-not (Test-PckitJournalEmpty -Journal $journal)) { [void](Save-PckitJournal -Journal $journal) }
+            Out-Msg @{ t = 'result'; ok = $ok; failed = $failed }
+        }
+        'health' {
+            $rep = Get-PckitHealthReport
+            $rows = @($rep.Findings | ForEach-Object { [pscustomobject]@{ severity = [string]$_.Severity; title = [string]$_.Title; detail = [string]$_.Detail; hint = [string]$_.Hint; link = [string]$_.Link } })
+            Out-Msg @{ t = 'result'; items = $rows }
+        }
+        'repair-system' {
+            $r = Invoke-PckitRepairSystem -OnStep { param($text) Out-Msg @{ t = 'progress'; i = 0; n = 0; text = $text } }
+            Out-Msg @{ t = 'result'; dism = $r.DismCode; sfcCode = $r.SfcCode; sfc = $r.Sfc }
+        }
+        'repair-network' {
+            $steps = @(Invoke-PckitRepairNetwork)
+            foreach ($s in $steps) { Out-Msg @{ t = 'item'; id = $s.Text; name = $s.Text; ok = $s.Ok; msg = '' } }
+            Out-Msg @{ t = 'result'; ok = @($steps | Where-Object { $_.Ok }).Count; failed = @($steps | Where-Object { -not $_.Ok }).Count }
+        }
+        'dns-bench' {
+            $b = Get-PckitDnsBenchmark -OnStep { param($text) Out-Msg @{ t = 'progress'; i = 0; n = 0; text = $text } }
+            $rows = @($b.Rows | ForEach-Object { [pscustomobject]@{ key = $_.Key; name = $_.Name; servers = $_.Servers; ms = $(if ($null -eq $_.Ms) { -1 } else { $_.Ms }); current = [bool]$_.Current; doh = [bool]$_.Doh; note = [string]$_.Note } })
+            Out-Msg @{ t = 'result'; items = $rows; adapters = @($b.Adapters); win11 = ([Environment]::OSVersion.Version.Build -ge 22000) }
+        }
+        'dns-set' {
+            # ids: [key, "doh"?]
+            $want = @(Get-IdList)
+            $journal = Read-PckitJournal
+            $done = @(Set-PckitDns -Key ([string]$want[0]) -Doh ($want -contains 'doh') -Journal $journal)
+            if (-not (Test-PckitJournalEmpty -Journal $journal)) { [void](Save-PckitJournal -Journal $journal) }
+            foreach ($d in $done) { Out-Msg @{ t = 'item'; id = $d.Alias; name = $d.Alias; ok = $d.Ok; msg = $d.Message } }
+            Out-Msg @{ t = 'result'; ok = @($done | Where-Object { $_.Ok }).Count; failed = @($done | Where-Object { -not $_.Ok }).Count; undoCount = (Get-PckitJournalCount -Journal (Read-PckitJournal)) }
+        }
+        'apps-list' {
+            $rows = @(Get-PckitBloatApps | ForEach-Object { [pscustomobject]@{ id = $_.Id; name = $_.Name; level = $_.Level; note = $_.Note } })
+            Out-Msg @{ t = 'result'; items = $rows }
+        }
+        'apps-remove' {
+            $want = @(Get-IdList)
+            $all = @(Get-PckitBloatApps)
+            $sel = @($all | Where-Object { $want -contains $_.Id })
+            $ok = 0; $failed = 0; $i = 0
+            foreach ($a in $sel) {
+                Out-Msg @{ t = 'progress'; i = $i; n = $sel.Count; text = [string]$a.Name }
+                $i++
+                $r = Remove-PckitBloatApp -Id $a.Id
+                if ($r.Ok) { $ok++ } else { $failed++ }
+                Out-Msg @{ t = 'item'; id = [string]$a.Id; name = [string]$a.Name; ok = [bool]$r.Ok; msg = [string]$r.Message }
+            }
             Out-Msg @{ t = 'result'; ok = $ok; failed = $failed }
         }
         'fps-status' {

@@ -128,12 +128,12 @@
     "id": "cs2.autoexec",
     "group": "CS2",
     "title": "CS2: autoexec с сетью на максимум и индикаторами проблем",
-    "what": "Добавляет в autoexec.cfg блок pckit: максимальный сетевой трафик от сервера и значки на экране, когда проседает fps, растёт пинг или теряются пакеты.",
+    "what": "Добавляет в autoexec.cfg блок Nolagi: максимальный сетевой трафик от сервера и значки на экране, когда проседает fps, растёт пинг или теряются пакеты.",
     "effect": "Если в игре стоял ограниченный трафик — меньше «потерь» в перестрелках. Индикаторы сразу показывают, что мешает: компьютер (fps) или интернет (пинг, потери). Только штатные команды игры — FACEIT и VAC это не трогает.",
     "effectLevel": "средний",
     "risk": "low",
     "needs": "none",
-    "note": "Ваши строки в autoexec.cfg не трогаются: pckit пишет только свой блок между отметками.",
+    "note": "Ваши строки в autoexec.cfg не трогаются: Nolagi пишет только свой блок между отметками.",
     "requires": { "cs2": true },
     "steps": [
       {
@@ -156,7 +156,7 @@
     "group": "CS2",
     "title": "CS2: параметр запуска +exec autoexec",
     "what": "Добавляет в параметры запуска CS2 в Steam команду, которая гарантированно выполняет autoexec.cfg при старте игры.",
-    "effect": "Ваш autoexec (и блок pckit) всегда применяется — даже если игра его пропустила. Остальные ваши параметры запуска сохраняются.",
+    "effect": "Ваш autoexec (и блок Nolagi) всегда применяется — даже если игра его пропустила. Остальные ваши параметры запуска сохраняются.",
     "effectLevel": "средний",
     "risk": "low",
     "needs": "none",
@@ -300,12 +300,12 @@
     "id": "dota.autoexec",
     "group": "Dota 2",
     "title": "Dota 2: autoexec со счётчиком fps",
-    "what": "Добавляет в autoexec.cfg Dota 2 блок pckit: счётчик fps на экране.",
+    "what": "Добавляет в autoexec.cfg Dota 2 блок Nolagi: счётчик fps на экране.",
     "effect": "Сразу видно, когда проседает fps — проще понять, помогли ли настройки. Только штатная команда игры, VAC это не трогает.",
     "effectLevel": "низкий",
     "risk": "low",
     "needs": "none",
-    "note": "Ваши строки в autoexec.cfg не трогаются: pckit пишет только свой блок между отметками. Dota 2 выполняет autoexec.cfg сама при запуске.",
+    "note": "Ваши строки в autoexec.cfg не трогаются: Nolagi пишет только свой блок между отметками. Dota 2 выполняет autoexec.cfg сама при запуске.",
     "requires": {
       "dota": true
     },
@@ -336,7 +336,7 @@
     "effectLevel": "низкий",
     "risk": "low",
     "needs": "admin",
-    "note": "Действует при следующем запуске Dota 2. Приоритет «Реального времени» pckit не ставит — он вешает систему.",
+    "note": "Действует при следующем запуске Dota 2. Приоритет «Реального времени» Nolagi не ставит — он вешает систему.",
     "requires": {
       "dota": true
     },
@@ -638,18 +638,238 @@
   },
   {
     "id": "copilot.off",
-    "group": "Фон",
+    "group": "ИИ",
     "title": "Отключить Copilot",
-    "what": "Отключает Windows Copilot политикой для текущего пользователя.",
+    "what": "Отключает Windows Copilot политикой для всех пользователей и убирает его кнопку с панели задач.",
     "effect": "Убирает значок и фоновую активность Copilot. На fps почти не влияет.",
     "effectLevel": "низкий",
     "risk": "low",
-    "needs": "none",
+    "needs": "admin",
+    "source": "optimizerDuck",
     "steps": [
-      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot", "name": "TurnOffWindowsCopilot", "value": 1, "valueType": "DWord" }
+      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot", "name": "TurnOffWindowsCopilot", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot", "name": "TurnOffWindowsCopilot", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "ShowCopilotButton", "value": 0, "valueType": "DWord" }
     ],
     "verify": [
-      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot", "name": "TurnOffWindowsCopilot", "value": 1 }
+      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot", "name": "TurnOffWindowsCopilot", "value": 1 },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot", "name": "TurnOffWindowsCopilot", "value": 1 }
+    ]
+  },
+  {
+    "id": "ai.recall.off",
+    "group": "ИИ",
+    "minBuild": 22000,
+    "title": "Отключить Recall",
+    "what": "Recall каждые несколько секунд делает снимок экрана, распознаёт на нём текст и складывает в базу для поиска. Политика запрещает включать Recall и сохранять снимки.",
+    "effect": "Есть только на Copilot+ ПК (ноутбуки с NPU). Там убирает постоянные снимки экрана в фоне: меньше нагрузки на диск и процессор, ваши переписки и пароли не попадают в базу. На обычном ПК ничего не меняет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "AllowRecallEnablement", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "DisableAIDataAnalysis", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "TurnOffSavingSnapshots", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "DisableAIDataAnalysis", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "TurnOffSavingSnapshots", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "AllowRecallEnablement", "value": 0 },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "TurnOffSavingSnapshots", "value": 1 }
+    ]
+  },
+  {
+    "id": "ai.clicktodo.off",
+    "group": "ИИ",
+    "minBuild": 22000,
+    "title": "Отключить Click To Do",
+    "what": "Click To Do — оверлей по Win + клик: ИИ разбирает то, что сейчас на экране, и предлагает действия.",
+    "effect": "Есть только на Copilot+ ПК. Не перехватит случайное нажатие Win + клик в игре и не будет анализировать экран.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "DisableClickToDo", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "DisableClickToDo", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "name": "DisableClickToDo", "value": 1 }
+    ]
+  },
+  {
+    "id": "ai.service.manual",
+    "group": "ИИ",
+    "minBuild": 22000,
+    "title": "Служба ИИ Windows — запуск по требованию",
+    "what": "Служба WSAIFabricSvc обслуживает ИИ-функции Windows 11 и стартует при каждой загрузке. Переводим её в ручной запуск: Windows включит её сама, если какой-то функции она понадобится.",
+    "effect": "На одну постоянно работающую службу меньше. Если такой службы в системе нет, пункт просто пропускается.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "service", "name": "WSAIFabricSvc", "startType": "Manual" }
+    ],
+    "verify": [
+      { "type": "service", "name": "WSAIFabricSvc", "startType": "Manual" }
+    ]
+  },
+  {
+    "id": "ai.edge.off",
+    "group": "ИИ",
+    "title": "Edge: без Copilot и ИИ-функций",
+    "what": "Политики Edge: Copilot не читает открытую страницу, нет ИИ-поиска по истории, «Написать с ИИ», Bing Chat на новой вкладке и значка Microsoft 365 Copilot. Локальная ИИ-модель Edge не скачивается.",
+    "effect": "Меньше фоновой активности и сетевых запросов Edge, модель на несколько гигабайт не займёт диск. Сам браузер работает как обычно.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "CopilotCDPPageContext", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "CopilotPageContext", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "Microsoft365CopilotChatIconEnabled", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "EdgeEntraCopilotPageContext", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "EdgeHistoryAISearchEnabled", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "ComposeInlineEnabled", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "GenAILocalFoundationalModelSettings", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "NewTabPageBingChatEnabled", "value": 0, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "CopilotPageContext", "value": 0 },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge", "name": "GenAILocalFoundationalModelSettings", "value": 1 }
+    ]
+  },
+  {
+    "id": "ai.paint.off",
+    "group": "ИИ",
+    "minBuild": 22000,
+    "title": "Paint: без ИИ-функций",
+    "what": "Выключает в Paint Cocreator, генеративную заливку и стирание, Image Creator и удаление фона.",
+    "effect": "Paint без облачных ИИ-кнопок. Обычное рисование не меняется. Работает в фоне только при нажатии, так что на fps не влияет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableCocreator", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableGenerativeFill", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableImageCreator", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableGenerativeErase", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableRemoveBackground", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableCocreator", "value": 1 },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint", "name": "DisableGenerativeFill", "value": 1 }
+    ]
+  },
+  {
+    "id": "ai.notepad.off",
+    "group": "ИИ",
+    "minBuild": 22000,
+    "title": "Блокнот: без ИИ-функций",
+    "what": "Убирает из Блокнота кнопки «Переписать» и «Кратко», которые отправляют текст в облако.",
+    "effect": "Блокнот снова просто блокнот, текст никуда не уходит. На fps не влияет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\WindowsNotepad", "name": "DisableAIFeatures", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\WindowsNotepad", "name": "DisableAIFeatures", "value": 1 }
+    ]
+  },
+  {
+    "id": "startads.off",
+    "group": "Фон",
+    "title": "Убрать рекламу из Пуска и Параметров",
+    "what": "Прячет раздел «Рекомендуем» и рекламные советы в меню Пуск, рекламу Microsoft 365 и аккаунта на главной странице Параметров, кнопку Meet Now на Windows 10.",
+    "effect": "Пуск и Параметры без рекламы. На fps не влияет.",
+    "effectLevel": "низкий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\Explorer", "name": "HideRecommendedSection", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "Start_IrisRecommendations", "value": 0, "valueType": "DWord" },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "name": "DisableConsumerAccountStateContent", "value": 1, "valueType": "DWord" },
+      { "type": "reg", "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "name": "HideSCAMeetNow", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "Start_IrisRecommendations", "value": 0 },
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "name": "DisableConsumerAccountStateContent", "value": 1 }
+    ]
+  },
+  {
+    "id": "svchost.group",
+    "group": "Фон",
+    "requires": { "ramGbMax": 8.5 },
+    "title": "Меньше процессов svchost на ПК с 8 ГБ ОЗУ",
+    "what": "На ПК с большим объёмом памяти Windows запускает каждую службу в отдельном процессе svchost. Порог 16 ГБ заставляет её снова собирать службы в общие процессы.",
+    "effect": "Освобождает 100–300 МБ ОЗУ и десятки процессов — заметно на 8 ГБ, когда игра и браузер упираются в память. Нужна перезагрузка. Предлагается только ПК с 8 ГБ и меньше.",
+    "effectLevel": "средний",
+    "risk": "low",
+    "needs": "admin",
+    "source": "optimizerDuck",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control", "name": "SvcHostSplitThresholdInKB", "value": 16777216, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control", "name": "SvcHostSplitThresholdInKB", "value": 16777216 }
+    ]
+  },
+  {
+    "id": "wu.drivers.off",
+    "group": "Обновления",
+    "title": "Windows не меняет драйверы сама",
+    "what": "Центр обновления перестаёт ставить драйверы вместе с ежемесячными обновлениями. Обновления безопасности и самой Windows ставятся как обычно.",
+    "effect": "Windows не заменит ваш свежий драйвер NVIDIA или AMD более старым из Центра обновления — из-за этого бывают просадки FPS и слетает профиль видеокарты. Драйверы обновляйте сами: Nolagi подскажет, когда выйдет новый драйвер NVIDIA.",
+    "effectLevel": "высокий",
+    "risk": "low",
+    "needs": "admin",
+    "source": "Win11Debloat",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate", "name": "ExcludeWUDriversInQualityUpdate", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate", "name": "ExcludeWUDriversInQualityUpdate", "value": 1 }
+    ]
+  },
+  {
+    "id": "wu.noreboot",
+    "group": "Обновления",
+    "title": "Не перезагружать ПК, пока вы в системе",
+    "what": "Windows больше не перезагружается сама после установки обновлений, пока вы вошли в систему. Обновления скачиваются и ставятся, перезагрузку вы делаете сами, когда удобно.",
+    "effect": "ПК не уйдёт в перезагрузку посреди матча или загрузки игры. Не забывайте иногда перезагружаться, чтобы обновления доустановились.",
+    "effectLevel": "средний",
+    "risk": "low",
+    "needs": "admin",
+    "source": "Win11Debloat",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU", "name": "NoAutoRebootWithLoggedOnUsers", "value": 1, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU", "name": "NoAutoRebootWithLoggedOnUsers", "value": 1 }
+    ]
+  },
+  {
+    "id": "fth.off",
+    "group": "Исправления",
+    "title": "Отключить Fault Tolerant Heap",
+    "what": "Если игра несколько раз вылетела, Windows молча включает ей «защитную» работу с памятью (Fault Tolerant Heap) и не выключает её обратно. Отключаем этот механизм.",
+    "effect": "Игра, которая когда-то вылетала, перестаёт работать медленнее и подтормаживать из-за защитного режима. Нужна перезагрузка.",
+    "effectLevel": "средний",
+    "risk": "low",
+    "needs": "admin",
+    "source": "Atlas OS, PC-Tuning",
+    "steps": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\FTH", "name": "Enabled", "value": 0, "valueType": "DWord" }
+    ],
+    "verify": [
+      { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\FTH", "name": "Enabled", "value": 0 }
     ]
   },
   {
@@ -1124,7 +1344,7 @@
     "myth": true,
     "title": "bcdedit: useplatformclock / disabledynamictick / HPET",
     "what": "Обещают убрать задержки и поднять fps правкой таймеров через bcdedit.",
-    "effect": "На современных системах чаще ухудшает задержку и FPS. pckit такие команды не выполняет.",
+    "effect": "На современных системах чаще ухудшает задержку и FPS. Nolagi такие команды не выполняет.",
     "effectLevel": "плацебо",
     "risk": "low",
     "needs": "none"
@@ -1319,7 +1539,7 @@
     "effectLevel": "низкий",
     "risk": "medium",
     "needs": "admin",
-    "note": "Действует после перезагрузки. Если после неё чёрный экран — загрузитесь в безопасный режим и откатите pckit.",
+    "note": "Действует после перезагрузки. Если после неё чёрный экран — загрузитесь в безопасный режим и откатите Nolagi.",
     "steps": [
       { "type": "devreg", "target": "pcidisplay", "vendor": "NVIDIA", "sub": "Interrupt Management\\MessageSignaledInterruptProperties", "name": "MSISupported", "value": 1 }
     ],
@@ -1567,7 +1787,7 @@
     "effectLevel": "низкий",
     "risk": "low",
     "needs": "admin",
-    "note": "Действует при следующем запуске CS2. Приоритет «Реального времени» pckit не ставит — он вешает систему.",
+    "note": "Действует при следующем запуске CS2. Приоритет «Реального времени» Nolagi не ставит — он вешает систему.",
     "steps": [
       { "type": "reg", "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\cs2.exe\\PerfOptions", "name": "CpuPriorityClass", "value": 3, "valueType": "DWord" }
     ],
@@ -1599,7 +1819,7 @@
     "myth": true,
     "title": "Утилиты «разгона» процессора с собственным драйвером",
     "what": "QuickCPU и похожие программы ставят свой драйвер ядра для чтения датчиков, а парковку ядер, Turbo и частоты меняют обычными настройками схемы питания.",
-    "effect": "Всё полезное делает схема «Максимальная производительность» в pckit. Сторонний драйвер ядра — лишний риск для античитов (FACEIT, Vanguard). Это не разгон: частоты выше заводских они не поднимают.",
+    "effect": "Всё полезное делает схема «Максимальная производительность» в Nolagi. Сторонний драйвер ядра — лишний риск для античитов (FACEIT, Vanguard). Это не разгон: частоты выше заводских они не поднимают.",
     "effectLevel": "плацебо",
     "risk": "low",
     "needs": "none"
@@ -1828,7 +2048,7 @@
     "myth": true,
     "title": "QoS-приоритет для сотен игр сразу",
     "what": "Политики DSCP 46 для списка из ~500 exe-файлов.",
-    "effect": "Домашние роутеры и провайдеры метки DSCP обычно игнорируют. Для CS2 pckit ставит одну политику — этого достаточно.",
+    "effect": "Домашние роутеры и провайдеры метки DSCP обычно игнорируют. Для CS2 Nolagi ставит одну политику — этого достаточно.",
     "effectLevel": "плацебо",
     "risk": "low",
     "needs": "none"
@@ -1838,7 +2058,7 @@
     "group": "Мифы",
     "expert": true,
     "myth": true,
-    "title": "Что оптимизаторы делают «заодно» и почему pckit так не делает",
+    "title": "Что оптимизаторы делают «заодно» и почему Nolagi так не делает",
     "what": "Выключение Defender, UAC (и его защищённого стола), SmartScreen, VBS, защит процессора (Mitigations), автообновлений Windows и браузеров, длинных путей; правки загрузчика bcdedit; перехват запуска Edge через Image File Execution Options; сотни «анти-телеметрийных» переменных среды (в том числе CI=1).",
     "effect": "Ослабляет защиту, мешает античитам и обновлениям безопасности, ломает сборочные инструменты. Прироста fps нет — поэтому этого нет даже в разделе «На свой риск».",
     "effectLevel": "плацебо",

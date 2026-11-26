@@ -19,11 +19,17 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.0.1";
+        public const string Version = "1.1.0";
 
         [STAThread]
         public static void Main()
         {
+            using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("appkey.txt"))
+                if (s != null) using (var r = new StreamReader(s)) Telemetry.Key = r.ReadToEnd().Trim();
+            var args = Environment.GetCommandLineArgs().Skip(1).Select(a => a.ToLowerInvariant()).ToArray();
+            if (args.Contains("/uninstall")) { Install.Uninstall(); return; }
+            if (Install.EnsureInstalled(args)) return;   // copied to Program Files and started from there
+
             var app = new App();
             app.ShutdownMode = ShutdownMode.OnMainWindowClose;
             app.DispatcherUnhandledException += (s, e) =>
@@ -34,8 +40,6 @@ namespace Pckit
             };
             using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Theme.xaml"))
                 app.Resources = (ResourceDictionary)XamlReader.Load(s);
-            using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("appkey.txt"))
-                if (s != null) using (var r = new StreamReader(s)) Telemetry.Key = r.ReadToEnd().Trim();
             app.Run(new MainWindow());
         }
     }
@@ -72,7 +76,7 @@ namespace Pckit
         Grid root;
         Grid scanScreen, shell, overlay;
         ContentControl page;
-        RadioButton navPc, navSet, navClean, navStart, navUndo;
+        RadioButton navPc, navSet, navClean, navStart, navUndo, navCheck, navApps;
         Settings cfg;
 
         Dictionary<string, object> hw;
@@ -83,7 +87,7 @@ namespace Pckit
         public MainWindow()
         {
             Title = "Nolagi";
-            Width = 1120; Height = 740; MinWidth = 900; MinHeight = 600;
+            Width = 1240; Height = 740; MinWidth = 900; MinHeight = 600;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
             FontSize = 14;
@@ -176,6 +180,7 @@ namespace Pckit
             Telemetry.Hw = hw;
             undoCount = (int)J.N(res, "undoCount");
             BuildItems(J.A(res, "actions"));
+            myths = J.A(res, "myths");
             await Task.Delay(400);
             root.Children.Remove(scanScreen);
             BuildShell();
@@ -306,9 +311,11 @@ namespace Pckit
             navClean = NavItem("", "Чистка", ShowClean);
             navStart = NavItem("", "Автозагрузка", ShowStartup);
             navUndo = NavItem("", "Откат", ShowUndo);
+            navCheck = NavItem("", "Проверка", ShowCheck);
+            navApps = NavItem("", "Приложения", ShowApps);
             navFps = NavItem("\uE916", "Замер FPS", ShowFps);
             navFeedback = NavItem("", "Написать автору", ShowFeedback);
-            foreach (var n in new[] { navPc, navSet, navFps, navClean, navStart, navUndo }) nav.Children.Add(n);
+            foreach (var n in new[] { navPc, navSet, navFps, navCheck, navClean, navApps, navStart, navUndo }) nav.Children.Add(n);
             nav.Children.Add(new Border { Height = 1, Background = Res("Line"), Margin = new Thickness(12, 10, 12, 10) });
             nav.Children.Add(navFeedback);
             shell.Children.Add(nav);
@@ -568,9 +575,32 @@ namespace Pckit
 
         TextBox search;
         TextBlock selInfo;
+        string selAllNote = "";   // what «Выбрать всё» left out and why
         Button applyBtn, undoSelBtn, clearBtn;
         Grid settingsPage;
         StackPanel settingsList;
+        ScrollViewer settingsScroll;
+
+        // big sections on top of «Настройки»; small groups from actions.json are mapped into them
+        static readonly string[] Sections = { "Игры", "Видеокарта", "Производительность", "Система", "Приватность и ИИ", "На свой риск" };
+        const string RiskSection = "На свой риск";
+        string curSection = "";                       // "" = all
+        Dictionary<string, Button> sectionTabs = new Dictionary<string, Button>();
+        List<Dictionary<string, object>> myths = new List<Dictionary<string, object>>();
+        UIElement mythPanel;
+
+        static string SectionOf(string group)
+        {
+            switch (group)
+            {
+                case "CS2": case "Dota 2": case "Игровой режим": case "Ввод": return "Игры";
+                case "Видеокарта": case "Графика": case "Работа": return "Видеокарта";
+                case "Питание": case "Планировщик": case "Сеть": case "Исправления": return "Производительность";
+                case "Конфиденциальность": case "ИИ": return "Приватность и ИИ";
+                case "На свой риск": return RiskSection;
+                default: return "Система";            // Фон, Службы и задачи, Обновления, Удобство and anything new
+            }
+        }
 
         void BuildItems(List<Dictionary<string, object>> rows)
         {
@@ -583,6 +613,9 @@ namespace Pckit
                 if (g == null) { g = new GroupBox2 { Name = it.Group }; groups.Add(g); }
                 g.Items.Add(it);
             }
+            // keep file order inside a section, sections in the fixed order
+            var ordered = groups.Select((g, i) => new { g, i }).OrderBy(x => Array.IndexOf(Sections, SectionOf(x.g.Name))).ThenBy(x => x.i).Select(x => x.g).ToList();
+            groups.Clear(); groups.AddRange(ordered);
             settingsPage = null;
         }
 
@@ -632,9 +665,51 @@ namespace Pckit
                 g.Panel = gp;
                 settingsList.Children.Add(gp);
             }
+
+            // myths: read-only cards at the end of «На свой риск»
+            if (myths.Count > 0)
+            {
+                var mp = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
+                var mh = new StackPanel { Margin = new Thickness(4, 0, 0, 8) };
+                mh.Children.Add(new TextBlock { Text = "Мифы", FontSize = 18, FontWeight = FontWeights.SemiBold });
+                mh.Children.Add(new TextBlock { Text = "Популярные «ускорения», которые не работают или вредят. Nolagi их не включает — здесь только объяснение почему.", FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+                mp.Children.Add(mh);
+                var ml = new StackPanel();
+                for (int i = 0; i < myths.Count; i++)
+                {
+                    var m = myths[i];
+                    var t = new StackPanel();
+                    var tl = new WrapPanel();
+                    tl.Children.Add(Pill("миф", "Bg", "Mut", null));
+                    tl.Children.Add(new TextBlock { Text = J.S(m, "title"), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+                    t.Children.Add(tl);
+                    if (J.S(m, "what").Length > 0) t.Children.Add(new TextBlock { Text = J.S(m, "what"), FontSize = 13, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) });
+                    if (J.S(m, "effect").Length > 0) t.Children.Add(new TextBlock { Text = "На деле: " + J.S(m, "effect"), FontSize = 12.5, Foreground = Res("Txt"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) });
+                    ml.Children.Add(new Border { Padding = new Thickness(16, 11, 16, 11), BorderBrush = Res("Line"), BorderThickness = new Thickness(0, i == 0 ? 0 : 1, 0, 0), Child = t });
+                }
+                mp.Children.Add(new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = ml });
+                mythPanel = mp;
+                settingsList.Children.Add(mp);
+            }
+            else mythPanel = null;
+
+            // section tabs: «Все» + one per section that has settings
+            sectionTabs.Clear();
+            var tabs = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
+            foreach (var sec in new[] { "" }.Concat(Sections))
+            {
+                string s0 = sec;
+                if (s0.Length > 0 && !groups.Any(g => SectionOf(g.Name) == s0)) continue;
+                var b = Btn(s0.Length == 0 ? "Все" : s0);
+                b.Margin = new Thickness(0, 0, 4, 6); b.Padding = new Thickness(9, 4, 9, 4); b.FontSize = 12.5;
+                b.Click += (s, e) => { curSection = s0; search.Text = ""; ApplyFilter(); };
+                sectionTabs[s0] = b;
+                tabs.Children.Add(b);
+            }
             UpdateGroupCounts();
 
             var sv = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = settingsList, Padding = new Thickness(0, 0, 8, 0) };
+            settingsScroll = sv;
 
             // top bar: search + select all
             var top = new Grid { Margin = new Thickness(0, 0, 0, 12) };
@@ -647,8 +722,25 @@ namespace Pckit
             top.Children.Add(search); top.Children.Add(hint);
             var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             var selAll = new Button { Content = "Выбрать всё", Style = St("Link"), Margin = new Thickness(0, 0, 18, 0) };
-            selAll.Click += (s, e) => { foreach (var it in items) if (it.Check.IsEnabled && it.Row.Visibility == Visibility.Visible && !it.Applied && !IsRisky(it)) it.Check.IsChecked = true; RefreshSelection(); };
-            selAll.ToolTip = "Отмечает все невключённые настройки, кроме тех, что «на свой риск»";
+            selAll.Click += (s, e) =>
+            {
+                int risky = 0, notFit = 0, done = 0;
+                foreach (var it in items)
+                {
+                    if (it.Row.Visibility != Visibility.Visible) continue;
+                    if (!it.Check.IsEnabled) notFit++;
+                    else if (it.Applied) done++;
+                    else if (IsRisky(it)) risky++;
+                    else it.Check.IsChecked = true;
+                }
+                var parts = new List<string>();
+                if (done > 0) parts.Add(done + " уже включено");
+                if (risky > 0) parts.Add(risky + " «на свой риск» — отметьте вручную");
+                if (notFit > 0) parts.Add(notFit + " не подходят этому ПК");
+                selAllNote = parts.Count > 0 ? "Не отмечено: " + string.Join(", ", parts) : "";
+                RefreshSelection();
+            };
+            selAll.ToolTip = "Отмечает все невключённые настройки. Не отмечает «на свой риск» (их выбирайте сами) и те, что не подходят этому ПК";
             var selRec = new Button { Content = "Выбрать подходящие мне ★", Style = St("Link") };
             selRec.ToolTip = "Только то, что Nolagi советует для вашего железа";
             selRec.Click += (s, e) => { foreach (var it in items) if (it.Check.IsEnabled && !it.Applied && J.B(it.Data, "recommended") && !IsRisky(it)) it.Check.IsChecked = true; RefreshSelection(); };
@@ -661,7 +753,7 @@ namespace Pckit
             var bg = new Grid();
             bg.ColumnDefinitions.Add(new ColumnDefinition());
             bg.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            selInfo = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = Res("Mut") };
+            selInfo = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 12, 0) };
             var btns = new StackPanel { Orientation = Orientation.Horizontal };
             clearBtn = Btn("Снять выбор");
             clearBtn.Click += (s, e) => { foreach (var it in items) it.Check.IsChecked = false; RefreshSelection(); };
@@ -678,9 +770,12 @@ namespace Pckit
 
             var body = new Grid();
             body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             body.RowDefinitions.Add(new RowDefinition());
             body.Children.Add(top);
-            Grid.SetRow(sv, 1); body.Children.Add(sv);
+            Grid.SetRow(tabs, 1); body.Children.Add(tabs);
+            Grid.SetRow(sv, 2); body.Children.Add(sv);
+            ApplyFilter();
             return PageFrame("Настройки", "Отметьте галочками то, что хотите включить, и нажмите «Применить». Зелёная метка — настройка уже включена.", body, bottom);
         }
 
@@ -767,17 +862,29 @@ namespace Pckit
                 int fit = g.Items.Count(i => i.Fits);
                 g.Count.Text = "включено " + g.Items.Count(i => i.Fits && i.Applied) + " из " + fit;
             }
+            foreach (var kv in sectionTabs)
+            {
+                if (kv.Key.Length == 0) continue;
+                var all = groups.Where(g => SectionOf(g.Name) == kv.Key).SelectMany(g => g.Items).Where(i => i.Fits).ToList();
+                kv.Value.Content = kv.Key + " " + all.Count(i => i.Applied) + "/" + all.Count;
+                kv.Value.ToolTip = "Включено " + all.Count(i => i.Applied) + " из " + all.Count + " подходящих этому ПК";
+            }
         }
 
         void ApplyFilter()
         {
             string q = (search.Text ?? "").Trim().ToLowerInvariant();
+            // search looks through all sections; otherwise only the chosen section is shown
+            foreach (var kv in sectionTabs) kv.Value.Style = St(q.Length == 0 && kv.Key == curSection ? "Primary" : "Btn");
+            if (mythPanel != null) mythPanel.Visibility = q.Length == 0 && (curSection == "" || curSection == RiskSection) ? Visibility.Visible : Visibility.Collapsed;
+            if (settingsScroll != null) settingsScroll.ScrollToTop();
             foreach (var g in groups)
             {
+                bool inSection = q.Length > 0 || curSection == "" || SectionOf(g.Name) == curSection;
                 int vis = 0;
                 foreach (var it in g.Items)
                 {
-                    bool show = q.Length == 0 || it.Title.ToLowerInvariant().Contains(q) || J.S(it.Data, "what").ToLowerInvariant().Contains(q) || g.Name.ToLowerInvariant().Contains(q);
+                    bool show = inSection && (q.Length == 0 || it.Title.ToLowerInvariant().Contains(q) || J.S(it.Data, "what").ToLowerInvariant().Contains(q) || g.Name.ToLowerInvariant().Contains(q));
                     it.Row.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
                     if (show) vis++;
                 }
@@ -798,7 +905,9 @@ namespace Pckit
             undoSelBtn.IsEnabled = toUndo > 0;
             undoSelBtn.ToolTip = "Вернуть как было то, что включил Nolagi. Настройки, включённые вручную или другой программой, здесь не откатываются.";
             clearBtn.IsEnabled = sel.Count > 0;
-            selInfo.Text = sel.Count == 0 ? "Ничего не выбрано" : "Выбрано: " + sel.Count + (toApply > 0 ? " · включить " + toApply : "") + (toUndo > 0 ? " · откатить " + toUndo : "");
+            if (sel.Count == 0) selAllNote = "";
+            selInfo.Text = sel.Count == 0 ? "Ничего не выбрано" : "Выбрано: " + sel.Count + (toApply > 0 ? " · включить " + toApply : "") + (toUndo > 0 ? " · откатить " + toUndo : "")
+                + (selAllNote.Length > 0 ? "\n" + selAllNote : "");
             foreach (var g in groups)
             {
                 var en = VisibleEnabled(g);
@@ -1150,10 +1259,29 @@ namespace Pckit
             startupShown = task;
 
             var checks = new Dictionary<string, CheckBox>();
-            var cl = new StackPanel();
-            bool first = true;
-            foreach (var x in list.OrderBy(x => J.B(x, "enabled") ? 0 : 1).ThenBy(x => J.S(x, "name")))
+            var outer = new StackPanel();
+            Func<string, string, List<Dictionary<string, object>>, StackPanel> section = (title, hint, rows) =>
             {
+                var cl0 = new StackPanel();
+                if (rows.Count == 0) return cl0;
+                var head = new StackPanel { Margin = new Thickness(2, outer.Children.Count == 0 ? 0 : 18, 0, 8) };
+                head.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold });
+                head.Children.Add(new TextBlock { Text = hint, FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+                outer.Children.Add(head);
+                outer.Children.Add(new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = cl0 });
+                return cl0;
+            };
+            var apps = list.Where(x => J.S(x, "kind") != "task").ToList();
+            var tasks = list.Where(x => J.S(x, "kind") == "task").ToList();
+            var clApps = section("Программы", "Запускаются при входе в Windows.", apps);
+            var clTasks = section("Задачи при входе и по расписанию", "Сторонние задачи планировщика: обновлялки и помощники программ. Системные задачи Windows здесь не показываются. Можно только включить или отключить, ничего не удаляется.", tasks);
+            StackPanel cl = null;
+            bool first = true;
+            foreach (var x in apps.OrderBy(x => J.B(x, "enabled") ? 0 : 1).ThenBy(x => J.S(x, "name"))
+                .Concat(tasks.OrderBy(x => J.B(x, "enabled") ? 0 : 1).ThenBy(x => J.S(x, "name"))))
+            {
+                var target = J.S(x, "kind") == "task" ? clTasks : clApps;
+                if (target != cl) { cl = target; first = true; }
                 var g = new Grid();
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
                 g.ColumnDefinitions.Add(new ColumnDefinition());
@@ -1169,6 +1297,8 @@ namespace Pckit
                 sp.Children.Add(tl);
                 string d = (J.S(x, "description") + (J.S(x, "publisher").Length > 0 ? " · " + J.S(x, "publisher") : "")).Trim(' ', '·');
                 if (d.Length > 0) sp.Children.Add(new TextBlock { Text = d, FontSize = 13, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+                if (J.S(x, "kind") == "task" && J.S(x, "where").Length > 0)
+                    sp.Children.Add(new TextBlock { Text = "Когда: " + J.S(x, "where").Replace("планировщик: ", ""), FontSize = 12.5, Foreground = Res("Txt"), TextWrapping = TextWrapping.Wrap });
                 if (J.S(x, "adviceNote").Length > 0) sp.Children.Add(new TextBlock { Text = J.S(x, "adviceNote"), FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
                 Grid.SetColumn(sp, 1);
                 bool en = J.B(x, "enabled");
@@ -1179,8 +1309,7 @@ namespace Pckit
                 cl.Children.Add(new Border { Padding = new Thickness(16, 12, 16, 12), BorderBrush = Res("Line"), BorderThickness = new Thickness(0, first ? 0 : 1, 0, 0), Child = g });
                 first = false;
             }
-            var body = new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = cl };
-            var sv = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 8, 0) };
+            var sv = new ScrollViewer { Content = outer, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 8, 0) };
 
             var bottom = new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(16, 10, 10, 10), Margin = new Thickness(0, 12, 8, 0) };
             var bg = new Grid();
@@ -1192,7 +1321,7 @@ namespace Pckit
             Action upd = () =>
             {
                 int n = checks.Values.Count(c => c.IsChecked == true);
-                info.Text = n == 0 ? "Отметьте программы" : "Выбрано: " + n;
+                info.Text = n == 0 ? "Отметьте программы или задачи" : "Выбрано: " + n;
                 onB.IsEnabled = offB.IsEnabled = n > 0;
             };
             foreach (var c in checks.Values) c.Click += (s, e) => upd();
@@ -1224,7 +1353,324 @@ namespace Pckit
             Grid.SetColumn(bs, 1);
             bg.Children.Add(info); bg.Children.Add(bs);
             bottom.Child = bg;
-            SetPage(PageFrame("Автозагрузка", "Программы, которые стартуют вместе с Windows. Меньше лишнего — быстрее загрузка и меньше фона в игре.", sv, bottom));
+            SetPage(PageFrame("Автозагрузка", "Программы и задачи, которые стартуют вместе с Windows или по расписанию. Меньше лишнего — быстрее загрузка и меньше фона в игре.", sv, bottom));
+        }
+
+        // =================================================================== Проверка и ремонт
+
+        Task<Dictionary<string, object>> healthScan;
+
+        static Border Section(UIElement child, double top = 0)
+        {
+            return new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(16, 12, 16, 12), Margin = new Thickness(0, top, 0, 0), Child = child };
+        }
+
+        static StackPanel SectionHead(string title, string hint, bool first)
+        {
+            var h = new StackPanel { Margin = new Thickness(2, first ? 0 : 20, 0, 8) };
+            h.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold });
+            if (!string.IsNullOrEmpty(hint)) h.Children.Add(new TextBlock { Text = hint, FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+            return h;
+        }
+
+        /// One overlay run of a bridge command whose progress has no counter (n = 0 means «just show the text»).
+        async Task<Dictionary<string, object>> RunTool(string title, string cmd, List<string> ids, List<Tuple<bool, string, string>> lines, Overlay ov)
+        {
+            return await Bridge.Run(cmd, ids, m => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                string t = J.S(m, "t");
+                if (t == "progress")
+                {
+                    if (J.N(m, "n") > 0) ov.Progress(J.N(m, "i"), J.N(m, "n"), J.S(m, "text"));
+                    else { ov.Step.Text = J.S(m, "text"); ov.Counter.Text = ""; }
+                }
+                else if (t == "item" && lines != null) lines.Add(Tuple.Create(J.B(m, "ok"), J.S(m, "name"), J.S(m, "msg")));
+            })));
+        }
+
+        async void ShowCheck()
+        {
+            var wait = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            wait.Children.Add(Spinner(36));
+            wait.Children.Add(new TextBlock { Text = "Проверяю память, диск, видеокарту и настройки…", Foreground = Res("Mut"), Margin = new Thickness(0, 14, 0, 0) });
+            SetPage(PageFrame("Проверка", null, wait));
+            if (healthScan == null) healthScan = Bridge.Run("health", null, null);
+            var task = healthScan;
+            List<Dictionary<string, object>> found;
+            try { found = J.A(await task, "items"); }
+            catch (Exception ex)
+            {
+                if (healthScan == task) healthScan = null;
+                if (navCheck.IsChecked == true) SetPage(PageFrame("Проверка", "Ошибка: " + ex.Message, new Grid()));
+                return;
+            }
+            if (healthScan == task) healthScan = null;
+            if (navCheck.IsChecked != true) return;
+
+            var outer = new StackPanel();
+            // ---- что нашёл Nolagi
+            outer.Children.Add(SectionHead("Что нашёл Nolagi", "Сначала то, что стоит исправить. Nolagi ничего не меняет сам — только подсказывает.", true));
+            var order = new Dictionary<string, int> { { "bad", 0 }, { "warn", 1 }, { "info", 2 }, { "ok", 3 } };
+            var list = new StackPanel();
+            bool first = true;
+            foreach (var f in found.OrderBy(x => order.ContainsKey(J.S(x, "severity")) ? order[J.S(x, "severity")] : 9))
+            {
+                string sev = J.S(f, "severity");
+                string label = sev == "bad" ? "исправить" : sev == "warn" ? "внимание" : sev == "ok" ? "в порядке" : "к сведению";
+                string bg = sev == "bad" ? "BadSoft" : sev == "warn" ? "WarnSoft" : sev == "ok" ? "OkSoft" : "Bg";
+                string fg = sev == "bad" ? "Bad" : sev == "warn" ? "Warn" : sev == "ok" ? "Ok" : "Mut";
+                var sp = new StackPanel();
+                var tl = new WrapPanel();
+                tl.Children.Add(Pill(label, bg, fg, null));
+                tl.Children.Add(new TextBlock { Text = J.S(f, "title"), FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
+                sp.Children.Add(tl);
+                if (J.S(f, "detail").Length > 0) sp.Children.Add(new TextBlock { Text = J.S(f, "detail"), FontSize = 13, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) });
+                if (J.S(f, "hint").Length > 0) sp.Children.Add(new TextBlock { Text = "Что сделать: " + J.S(f, "hint"), FontSize = 12.5, Foreground = Res("Txt"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) });
+                if (J.S(f, "link") == "pckit:clean")
+                {
+                    var go = Btn("Открыть «Чистку»"); go.HorizontalAlignment = HorizontalAlignment.Left; go.Margin = new Thickness(0, 6, 0, 0);
+                    go.Click += (s, e) => navClean.IsChecked = true;
+                    sp.Children.Add(go);
+                }
+                list.Children.Add(new Border { Padding = new Thickness(0, first ? 0 : 10, 0, 10), BorderBrush = Res("Line"), BorderThickness = new Thickness(0, first ? 0 : 1, 0, 0), Child = sp });
+                first = false;
+            }
+            outer.Children.Add(Section(list));
+
+            // ---- ремонт Windows
+            outer.Children.Add(SectionHead("Ремонт Windows", "Встроенные средства Windows: ничего не удаляют и не ломают. Помогают при вылетах, синих экранах и пропавшем интернете.", false));
+            var rep = new StackPanel();
+            Func<string, string, Button, Grid> toolRow = (title, text, btn) =>
+            {
+                var g = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+                g.ColumnDefinitions.Add(new ColumnDefinition());
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var t = new StackPanel { Margin = new Thickness(0, 0, 16, 0) };
+                t.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold });
+                t.Children.Add(new TextBlock { Text = text, FontSize = 13, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+                btn.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(btn, 1);
+                g.Children.Add(t); g.Children.Add(btn);
+                return g;
+            };
+            var sfcBtn = Btn("Проверить и починить");
+            sfcBtn.Click += async (s, e) =>
+            {
+                if (MessageBox.Show(this, "Windows проверит и восстановит свои системные файлы (DISM и SFC).\n\nЭто занимает 10–30 минут, нужен интернет. Можно пользоваться ПК, но лучше не играть. Продолжить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+                var ov = ShowOverlay("Ремонт системных файлов");
+                ov.Step.Text = "Запускаю…"; ov.Counter.Text = "";
+                string head, note;
+                try
+                {
+                    var r = await RunTool("", "repair-system", null, null, ov);
+                    string sfc = J.S(r, "sfc");
+                    bool dismOk = J.N(r, "dism") == 0;
+                    head = sfc == "clean" ? "Повреждений не найдено" : sfc == "repaired" ? "Найдены и исправлены повреждения" : sfc == "broken" ? "Часть файлов исправить не удалось" : "Проверка завершена";
+                    note = (dismOk ? "Хранилище компонентов в порядке. " : "DISM не смог проверить хранилище (код " + J.N(r, "dism") + ") — нужен интернет. ")
+                        + (sfc == "repaired" ? "Перезагрузите ПК." : sfc == "broken" ? "Перезагрузите ПК и запустите проверку ещё раз. Если не поможет — нужна переустановка Windows поверх (с сохранением файлов)." : "");
+                }
+                catch (Exception ex) { head = "Ошибка: " + ex.Message; note = ""; }
+                ov.Done(head, new List<Tuple<bool, string, string>>(), note);
+            };
+            var netBtn = Btn("Сбросить сеть");
+            netBtn.Click += async (s, e) =>
+            {
+                if (MessageBox.Show(this, "Сброс вернёт сетевые настройки Windows к заводским: Winsock, TCP/IP и кэш DNS.\n\nПомогает, когда пропал интернет или не грузятся сайты. Ручные настройки IP, DNS и некоторых VPN придётся задать заново. После сброса нужна перезагрузка.\n\nПродолжить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                var ov = ShowOverlay("Сброс сети");
+                var lines = new List<Tuple<bool, string, string>>();
+                string head;
+                try { var r = await RunTool("", "repair-network", null, lines, ov); head = J.N(r, "failed") > 0 ? "Сделано не всё" : "Сеть сброшена"; }
+                catch (Exception ex) { head = "Ошибка: " + ex.Message; }
+                ov.Done(head, lines, "Перезагрузите ПК, чтобы сброс вступил в силу.");
+            };
+            rep.Children.Add(toolRow("Системные файлы Windows", "Проверка и восстановление (DISM + SFC). Если игры или Windows вылетают без причины. 10–30 минут.", sfcBtn));
+            rep.Children.Add(new Border { Height = 1, Background = Res("Line"), Margin = new Thickness(0, 6, 0, 6) });
+            rep.Children.Add(toolRow("Сеть", "Сброс Winsock, TCP/IP и кэша DNS. Если пропал интернет или не грузятся сайты и лаунчеры.", netBtn));
+            outer.Children.Add(Section(rep));
+
+            // ---- DNS
+            outer.Children.Add(SectionHead("Быстрый DNS", "DNS превращает адрес сайта в IP. Быстрый DNS ускоряет открытие сайтов, Steam и лаунчеров. Пинг в самой игре он не меняет.", false));
+            var dnsBox = new StackPanel();
+            var benchBtn = Btn("Замерить скорость DNS", "Primary"); benchBtn.HorizontalAlignment = HorizontalAlignment.Left;
+            dnsBox.Children.Add(benchBtn);
+            benchBtn.Click += async (s, e) => await RunDnsBench(dnsBox);
+            outer.Children.Add(Section(dnsBox));
+
+            var sv = new ScrollViewer { Content = outer, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 8, 0) };
+            SetPage(PageFrame("Проверка", "Что мешает играм на этом ПК, ремонт Windows и выбор быстрого DNS.", sv));
+        }
+
+        async Task RunDnsBench(StackPanel box)
+        {
+            box.Children.Clear();
+            var w = new StackPanel { Orientation = Orientation.Horizontal };
+            w.Children.Add(Spinner(20));
+            var wt = new TextBlock { Text = "  Замеряю…", Foreground = Res("Mut"), VerticalAlignment = VerticalAlignment.Center };
+            w.Children.Add(wt);
+            box.Children.Add(w);
+            Dictionary<string, object> r;
+            try
+            {
+                r = await Bridge.Run("dns-bench", null, m => Dispatcher.BeginInvoke(new Action(() => { if (J.S(m, "t") == "progress") wt.Text = "  Замеряю: " + J.S(m, "text"); })));
+            }
+            catch (Exception ex)
+            {
+                box.Children.Clear();
+                box.Children.Add(new TextBlock { Text = "Ошибка: " + ex.Message, Foreground = Res("Bad"), TextWrapping = TextWrapping.Wrap });
+                return;
+            }
+            box.Children.Clear();
+            var rows = J.A(r, "items");
+            var ok = rows.Where(x => J.N(x, "ms") >= 0).OrderBy(x => J.N(x, "ms")).ToList();
+            var best = ok.FirstOrDefault();
+            bool win11 = J.B(r, "win11");
+            if (rows.Count == 0 || best == null)
+            {
+                box.Children.Add(new TextBlock { Text = "Ни один DNS не ответил. Проверьте интернет.", Foreground = Res("Warn") });
+                return;
+            }
+            var cur = rows.FirstOrDefault(x => J.B(x, "current"));
+            string summary;
+            if (J.B(best, "current")) summary = "Ваш текущий DNS отвечает быстрее всех — менять не нужно.";
+            else if (cur != null && J.N(cur, "ms") >= 0 && J.N(cur, "ms") - J.N(best, "ms") < 10) summary = "Разница меньше 10 мс — менять DNS не обязательно.";
+            else summary = "Быстрее всего: " + J.S(best, "name") + ". Можно выбрать его кнопкой ниже.";
+            box.Children.Add(new TextBlock { Text = summary, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+
+            var doh = new CheckBox { Style = St("Chk"), IsChecked = true, Margin = new Thickness(0, 0, 0, 8), Visibility = win11 ? Visibility.Visible : Visibility.Collapsed };
+            doh.Content = new TextBlock { Text = "Шифровать запросы (DNS-over-HTTPS) — провайдер не видит, какие сайты вы открываете", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 0, 0) };
+            foreach (var x in rows.OrderBy(x => J.N(x, "ms") < 0 ? 99999 : J.N(x, "ms")))
+            {
+                var g = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+                g.ColumnDefinitions.Add(new ColumnDefinition());
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var t = new StackPanel();
+                var tl = new WrapPanel();
+                tl.Children.Add(new TextBlock { Text = J.S(x, "name"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 8, 0) });
+                if (x == best) tl.Children.Add(Pill("самый быстрый", "OkSoft", "Ok", null));
+                t.Children.Add(tl);
+                t.Children.Add(new TextBlock { Text = J.S(x, "servers") + (J.S(x, "note").Length > 0 ? " · " + J.S(x, "note") : ""), FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+                double ms = J.N(x, "ms");
+                var msT = new TextBlock { Text = ms < 0 ? "нет ответа" : ms + " мс", VerticalAlignment = VerticalAlignment.Center, Foreground = ms < 0 ? Res("Bad") : Res("Txt"), FontWeight = FontWeights.SemiBold };
+                Grid.SetColumn(msT, 1);
+                g.Children.Add(t); g.Children.Add(msT);
+                if (!J.B(x, "current") && ms >= 0)
+                {
+                    var pick = Btn("Выбрать"); pick.VerticalAlignment = VerticalAlignment.Center;
+                    string key = J.S(x, "key"), name = J.S(x, "name");
+                    bool canDoh = J.B(x, "doh");
+                    pick.Click += async (s, e) =>
+                    {
+                        var ids = new List<string> { key };
+                        if (canDoh && win11 && doh.IsChecked == true) ids.Add("doh");
+                        var ov = ShowOverlay("Меняю DNS на " + name);
+                        ov.Step.Text = "Меняю настройки сетевых адаптеров"; ov.Counter.Text = "";
+                        var lines = new List<Tuple<bool, string, string>>();
+                        string head;
+                        try
+                        {
+                            var res = await RunTool("", "dns-set", ids, lines, ov);
+                            undoCount = (int)J.N(res, "undoCount");
+                            head = J.N(res, "failed") > 0 ? "Сделано не всё" : "DNS изменён на " + name;
+                        }
+                        catch (Exception ex) { head = "Ошибка: " + ex.Message; }
+                        ov.Done(head, lines, "Вернуть прежний DNS можно во вкладке «Откат».");
+                        await RunDnsBench(box);
+                    };
+                    Grid.SetColumn(pick, 2);
+                    g.Children.Add(pick);
+                }
+                box.Children.Add(g);
+            }
+            box.Children.Add(doh);
+            var again = new Button { Content = "Замерить ещё раз", Style = St("Link"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+            again.Click += async (s, e) => await RunDnsBench(box);
+            box.Children.Add(again);
+        }
+
+        // =================================================================== Встроенные приложения
+
+        async void ShowApps()
+        {
+            var wait = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            wait.Children.Add(Spinner(36));
+            wait.Children.Add(new TextBlock { Text = "Ищу встроенные приложения…", Foreground = Res("Mut"), Margin = new Thickness(0, 14, 0, 0) });
+            SetPage(PageFrame("Приложения", null, wait));
+            List<Dictionary<string, object>> list;
+            try { list = J.A(await Bridge.Run("apps-list", null, null), "items"); }
+            catch (Exception ex)
+            {
+                if (navApps.IsChecked == true) SetPage(PageFrame("Приложения", "Ошибка: " + ex.Message, new Grid()));
+                return;
+            }
+            if (navApps.IsChecked != true) return;
+            const string sub = "Предустановленные приложения Windows, которыми почти никто не пользуется. Системные, Магазин, драйверы и Xbox (нужны для Game Pass) здесь не показываются.";
+            if (list.Count == 0)
+            {
+                var empty = new TextBlock { Text = "Лишних встроенных приложений не найдено — всё уже чисто.", Foreground = Res("Mut"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                SetPage(PageFrame("Приложения", sub, empty));
+                return;
+            }
+            var checks = new Dictionary<string, CheckBox>();
+            var cl = new StackPanel();
+            bool first = true;
+            foreach (var x in list.OrderBy(x => J.S(x, "level") == "safe" ? 0 : 1).ThenBy(x => J.S(x, "name")))
+            {
+                var g = new Grid();
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
+                g.ColumnDefinitions.Add(new ColumnDefinition());
+                var c = new CheckBox { Style = St("Chk"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) };
+                checks[J.S(x, "id")] = c;
+                var sp = new StackPanel();
+                var tl = new WrapPanel();
+                tl.Children.Add(new TextBlock { Text = J.S(x, "name"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 8, 0) });
+                if (J.S(x, "level") == "safe") tl.Children.Add(Pill("можно удалить", "AccSoft", "Acc", null));
+                else tl.Children.Add(Pill("если пользуетесь — оставьте", "WarnSoft", "Warn", null));
+                sp.Children.Add(tl);
+                if (J.S(x, "level") != "safe" && J.S(x, "note").Length > 0 && J.S(x, "id") == "ONEDRIVE")
+                    sp.Children.Add(new TextBlock { Text = J.S(x, "note"), FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+                Grid.SetColumn(sp, 1);
+                g.Children.Add(c); g.Children.Add(sp);
+                cl.Children.Add(new Border { Padding = new Thickness(16, 11, 16, 11), BorderBrush = Res("Line"), BorderThickness = new Thickness(0, first ? 0 : 1, 0, 0), Child = g });
+                first = false;
+            }
+            var body = new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = cl, VerticalAlignment = VerticalAlignment.Top };
+            var sv = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 8, 0) };
+
+            var bottom = new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(16, 10, 10, 10), Margin = new Thickness(0, 12, 8, 0) };
+            var bg = new Grid();
+            bg.ColumnDefinitions.Add(new ColumnDefinition());
+            bg.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var info = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = Res("Mut") };
+            var safeB = new Button { Content = "Отметить «можно удалить»", Style = St("Link"), Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center };
+            var delB = Btn("Удалить", "Danger");
+            Action upd = () =>
+            {
+                int n = checks.Values.Count(c => c.IsChecked == true);
+                info.Text = n == 0 ? "Отметьте приложения" : "Выбрано: " + n;
+                delB.IsEnabled = n > 0;
+            };
+            foreach (var c in checks.Values) c.Click += (s, e) => upd();
+            safeB.Click += (s, e) => { foreach (var x in list) if (J.S(x, "level") == "safe") checks[J.S(x, "id")].IsChecked = true; upd(); };
+            upd();
+            delB.Click += async (s, e) =>
+            {
+                var ids = checks.Where(kv => kv.Value.IsChecked == true).Select(kv => kv.Key).ToList();
+                if (MessageBox.Show(this, "Удалить выбранные приложения (" + ids.Count + ")?\n\nКнопкой «Откат» их не вернуть — только заново установить из Microsoft Store. Ваши файлы не затрагиваются.", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                var ov = ShowOverlay("Удаляю приложения");
+                var lines = new List<Tuple<bool, string, string>>();
+                string head;
+                try { var r = await RunTool("", "apps-remove", ids, lines, ov); head = "Удалено: " + J.N(r, "ok") + (J.N(r, "failed") > 0 ? ", не получилось: " + J.N(r, "failed") : ""); }
+                catch (Exception ex) { head = "Ошибка: " + ex.Message; }
+                ov.Done(head, lines, "Вернуть приложение можно из Microsoft Store.");
+                ShowApps();
+            };
+            var bs = new StackPanel { Orientation = Orientation.Horizontal };
+            bs.Children.Add(safeB); bs.Children.Add(delB);
+            Grid.SetColumn(bs, 1);
+            bg.Children.Add(info); bg.Children.Add(bs);
+            bottom.Child = bg;
+            SetPage(PageFrame("Приложения", sub, sv, bottom));
         }
 
         // =================================================================== Откат

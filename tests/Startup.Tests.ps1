@@ -29,7 +29,11 @@ Check 'неизвестное — на усмотрение' ((Get-PckitStartupA
 # 3. реальный список (только чтение)
 $entries = @(Get-PckitStartupEntries)
 Check 'список автозагрузки читается' ($null -ne $entries)
-Check 'у каждой записи есть путь StartupApproved' (@($entries | Where-Object { -not $_.ApprovedPath }).Count -eq 0)
+Check 'у каждой программы есть путь StartupApproved' (@($entries | Where-Object { $_.Kind -ne 'task' -and -not $_.ApprovedPath }).Count -eq 0)
+Check 'задачи только сторонние (не \Microsoft\)' (@($entries | Where-Object { $_.Kind -eq 'task' -and $_.TaskPath -like '\Microsoft\*' }).Count -eq 0)
+Check 'у задач есть «когда запускается»' (@($entries | Where-Object { $_.Kind -eq 'task' -and $_.Where -notlike 'планировщик: *' }).Count -eq 0)
+Check 'обновлялка-задача — на усмотрение' ((Get-PckitStartupAdvice -Name 'GoogleUpdaterTaskSystem' -Exe 'C:\x\updater.exe' -Publisher 'Google LLC' -Task).Advice -eq 'на ваше усмотрение')
+Check 'Discord-программа по-прежнему — можно отключить' ((Get-PckitStartupAdvice -Name 'Discord' -Exe 'C:\x\Update.exe' -Publisher 'Discord Inc.').Advice -eq 'можно отключить')
 Check 'записи — объекты, а не вложенный массив' (@($entries | Where-Object { $_ -is [array] }).Count -eq 0)
 foreach ($e in $entries) { Write-Host ('      {0,-34} {1,-9} {2,-20} {3}' -f $e.Name, $(if ($e.Enabled) { 'вкл' } else { 'выкл' }), $e.Advice, $e.Publisher) -ForegroundColor DarkGray }
 
@@ -60,6 +64,30 @@ Check 'включение записано (02)' ((Get-Item -LiteralPath $testKe
 Check 'откат вернул прежние байты' ((Get-Item -LiteralPath $testKey).GetValue('FakeApp')[4] -eq 1)
 
 Remove-Item -LiteralPath 'HKCU:\Software\pckit-test' -Recurse -Force -ErrorAction SilentlyContinue
+
+# 5. задача планировщика: своя тестовая задача \NolagiTest\, выключить/включить и откат
+$tn = 'FakeUpdater'; $tp = '\NolagiTest\'
+Unregister-ScheduledTask -TaskPath $tp -TaskName $tn -Confirm:$false -ErrorAction SilentlyContinue
+$registered = $false
+try {
+    $trg = New-ScheduledTaskTrigger -Daily -At 3am
+    $act = New-ScheduledTaskAction -Execute 'C:\NolagiTest\fake-updater.exe'   # не из папки Windows: такие задачи скрыты как системные
+    Register-ScheduledTask -TaskPath $tp -TaskName $tn -Trigger $trg -Action $act -ErrorAction Stop | Out-Null
+    $registered = $true
+} catch { Write-Host ('SKIP  тестовую задачу не создать: ' + $_.Exception.Message) -ForegroundColor Yellow }
+if ($registered) {
+    $te = @(Get-PckitStartupTasks | Where-Object { $_.FullPath -eq ($tp + $tn) })
+    Check 'тестовая задача в списке' ($te.Count -eq 1)
+    Check 'триггер «каждый день»' ($te.Count -eq 1 -and $te[0].Where -eq 'планировщик: каждый день')
+    $j3 = New-PckitJournal
+    $r3 = Set-PckitStartupEnabled -Entry $te[0] -Enabled $false -Journal $j3
+    Check 'задача выключена' ($r3.Status -eq 'ok' -and [string](Get-ScheduledTask -TaskPath $tp -TaskName $tn).State -eq 'Disabled')
+    Check 'в журнале команда включения' (@($j3.commands).Count -eq 1 -and [string]$j3.commands[0].undo -match '/ENABLE$')
+    $res3 = Restore-PckitJournal -Journal $j3 -Run
+    Check 'откат включил задачу' ($res3.Failed -eq 0 -and [string](Get-ScheduledTask -TaskPath $tp -TaskName $tn).State -ne 'Disabled')
+    Unregister-ScheduledTask -TaskPath $tp -TaskName $tn -Confirm:$false -ErrorAction SilentlyContinue
+    try { $svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $svc.GetFolder('\').DeleteFolder('NolagiTest', 0) } catch { }
+}
 Remove-Item -LiteralPath $script:PckitStateRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ('Итого: PASS {0}, FAIL {1}' -f $pass, $fail)
