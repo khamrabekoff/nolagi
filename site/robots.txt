@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://khamrabekoff.github.io/nolagi/sitemap.xml
+Sitemap: https://nolagi.dpdns.org/sitemap.xml
