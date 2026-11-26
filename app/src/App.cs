@@ -19,7 +19,7 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.1.1";
+        public const string Version = "1.2.0";
 
         [STAThread]
         public static void Main()
@@ -315,7 +315,9 @@ namespace Pckit
             navApps = NavItem("", "Приложения", ShowApps);
             navFps = NavItem("\uE916", "Замер FPS", ShowFps);
             navFeedback = NavItem("", "Написать автору", ShowFeedback);
-            foreach (var n in new[] { navPc, navSet, navFps, navCheck, navClean, navApps, navStart, navUndo }) nav.Children.Add(n);
+            navMon = NavItem("", "Мониторинг", ShowMonitor);
+            navMon.Unchecked += (s, e) => StopMonitor();
+            foreach (var n in new[] { navPc, navSet, navMon, navFps, navCheck, navClean, navApps, navStart, navUndo }) nav.Children.Add(n);
             nav.Children.Add(new Border { Height = 1, Background = Res("Line"), Margin = new Thickness(12, 10, 12, 10) });
             nav.Children.Add(navFeedback);
             shell.Children.Add(nav);
@@ -594,6 +596,93 @@ namespace Pckit
         Dictionary<string, Button> sectionTabs = new Dictionary<string, Button>();
         List<Dictionary<string, object>> myths = new List<Dictionary<string, object>>();
         UIElement mythPanel;
+        UIElement prioPanel;
+        StackPanel prioBody;
+
+        // generic exe names: IFEO applies to every program with this file name
+        static readonly string[] GenericExe = { "game.exe", "launcher.exe", "start.exe", "play.exe", "client.exe", "app.exe", "main.exe", "run.exe", "setup.exe", "win64.exe" };
+
+        async void LoadPriorityPanel()
+        {
+            var body = prioBody;
+            if (body == null) return;
+            body.Children.Clear();
+            var w = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
+            w.Children.Add(Spinner(18));
+            w.Children.Add(new TextBlock { Text = "  Ищу игры в Steam…", Foreground = Res("Mut"), VerticalAlignment = VerticalAlignment.Center });
+            body.Children.Add(w);
+            Dictionary<string, object> r;
+            try { r = await Bridge.Run("prio-list", null, null); }
+            catch (Exception ex)
+            {
+                body.Children.Clear();
+                body.Children.Add(new TextBlock { Text = "Не удалось получить список: " + ex.Message, Foreground = Res("Bad"), TextWrapping = TextWrapping.Wrap });
+                return;
+            }
+            if (body != prioBody) return;
+            body.Children.Clear();
+            var own = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "cs2.exe", "dota2.exe" };   // have their own settings
+            var high = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var arr = J.Get(r, "high") as object[];
+            if (arr != null) foreach (var o in arr) high.Add(Convert.ToString(o));
+            var rows = new List<Tuple<string, string, bool>>();   // name, exe, high
+            foreach (var g in J.A(r, "games"))
+                if (!own.Contains(J.S(g, "exe"))) rows.Add(Tuple.Create(J.S(g, "name"), J.S(g, "exe"), high.Contains(J.S(g, "exe"))));
+            foreach (var exe in high)
+                if (!own.Contains(exe) && !rows.Any(x => string.Equals(x.Item2, exe, StringComparison.OrdinalIgnoreCase))) rows.Add(Tuple.Create(exe, exe, true));
+
+            if (rows.Count == 0)
+                body.Children.Add(new TextBlock { Text = "Других игр в Steam не найдено. Можно выбрать exe игры вручную.", Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 6) });
+            bool first = true;
+            foreach (var row in rows.OrderBy(x => x.Item3 ? 0 : 1).ThenBy(x => x.Item1))
+            {
+                var g = new Grid { Margin = new Thickness(0, first ? 0 : 6, 0, 0) };
+                g.ColumnDefinitions.Add(new ColumnDefinition());
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var t = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                var tl = new WrapPanel();
+                tl.Children.Add(new TextBlock { Text = row.Item1, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 8, 0) });
+                if (row.Item3) tl.Children.Add(Pill("высокий приоритет", "OkSoft", "Ok", null));
+                t.Children.Add(tl);
+                if (row.Item1 != row.Item2) t.Children.Add(new TextBlock { Text = row.Item2, FontSize = 12.5, Foreground = Res("Mut") });
+                var b = Btn(row.Item3 ? "Убрать" : "Включить", row.Item3 ? "Btn" : "Primary");
+                b.VerticalAlignment = VerticalAlignment.Center;
+                string exe = row.Item2; bool on = row.Item3;
+                b.Click += async (s, e) => await SetGamePriority(exe, !on);
+                Grid.SetColumn(b, 1);
+                g.Children.Add(t); g.Children.Add(b);
+                body.Children.Add(g);
+                first = false;
+            }
+            var pick = new Button { Content = "Выбрать exe игры вручную…", Style = St("Link"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
+            pick.Click += async (s, e) =>
+            {
+                var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Программа (*.exe)|*.exe", Title = "Выберите exe игры" };
+                if (dlg.ShowDialog(this) != true) return;
+                string name = System.IO.Path.GetFileName(dlg.FileName);
+                if (GenericExe.Contains(name.ToLowerInvariant()) &&
+                    MessageBox.Show(this, "У файла слишком общее имя «" + name + "». Высокий приоритет получат все программы с таким именем.\n\nПродолжить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                await SetGamePriority(name, true);
+            };
+            body.Children.Add(pick);
+        }
+
+        async Task SetGamePriority(string exe, bool high)
+        {
+            var ov = ShowOverlay(high ? "Включаю высокий приоритет" : "Убираю высокий приоритет");
+            ov.Step.Text = exe; ov.Counter.Text = "";
+            var lines = new List<Tuple<bool, string, string>>();
+            string head;
+            try
+            {
+                var r = await RunTool("", high ? "prio-set" : "prio-unset", new List<string> { exe }, lines, ov);
+                undoCount = (int)J.N(r, "undoCount");
+                head = J.N(r, "failed") > 0 ? "Не получилось" : (high ? "Готово: " + exe + " — высокий приоритет" : "Готово: приоритет " + exe + " обычный");
+            }
+            catch (Exception ex) { head = "Ошибка: " + ex.Message; }
+            ov.Done(head, lines, high ? "Действует со следующего запуска игры. Отменить — здесь же или во вкладке «Откат»." : "Действует со следующего запуска игры.");
+            LoadPriorityPanel();
+        }
 
         static string SectionOf(string group)
         {
@@ -698,6 +787,21 @@ namespace Pckit
                 settingsList.Children.Add(mp);
             }
             else mythPanel = null;
+
+            // «Высокий приоритет для других игр» — right after the last group of «Игры»
+            var pp = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
+            var ph = new StackPanel { Margin = new Thickness(4, 0, 0, 8) };
+            ph.Children.Add(new TextBlock { Text = "Высокий приоритет для других игр", FontSize = 18, FontWeight = FontWeights.SemiBold });
+            ph.Children.Add(new TextBlock { Text = "Как в Process Lasso, но без программы в фоне: Windows сама даёт игре высокий приоритет процессора при каждом запуске. Фон реже отнимает процессор — меньше редких просадок. CS2 и Dota 2 настраиваются выше. Всё откатывается.", FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+            pp.Children.Add(ph);
+            prioBody = new StackPanel();
+            pp.Children.Add(new Border { Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(16, 10, 16, 12), Child = prioBody });
+            prioPanel = pp;
+            int lastGames = -1;
+            for (int i = 0; i < groups.Count; i++) if (SectionOf(groups[i].Name) == "Игры") lastGames = settingsList.Children.IndexOf(groups[i].Panel);
+            if (lastGames >= 0) settingsList.Children.Insert(lastGames + 1, pp);
+            else settingsList.Children.Insert(0, pp);
+            LoadPriorityPanel();
 
             // section tabs: «Все» + one per section that has settings
             sectionTabs.Clear();
@@ -883,6 +987,7 @@ namespace Pckit
             // search looks through all sections; otherwise only the chosen section is shown
             foreach (var kv in sectionTabs) kv.Value.Style = St(q.Length == 0 && kv.Key == curSection ? "Primary" : "Btn");
             if (mythPanel != null) mythPanel.Visibility = q.Length == 0 && (curSection == "" || curSection == RiskSection) ? Visibility.Visible : Visibility.Collapsed;
+            if (prioPanel != null) prioPanel.Visibility = (q.Length == 0 && (curSection == "" || curSection == "Игры")) || (q.Length > 0 && ("приоритет игр process lasso".Contains(q))) ? Visibility.Visible : Visibility.Collapsed;
             if (settingsScroll != null) settingsScroll.ScrollToTop();
             foreach (var g in groups)
             {
@@ -1119,6 +1224,7 @@ namespace Pckit
                 if (MessageBox.Show(this, "Nolagi ещё работает. Закрыть всё равно?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;
             }
             base.OnClosing(e);
+            if (!e.Cancel && mon != null) { if (monTimer != null) monTimer.Stop(); mon.Dispose(); mon = null; }   // nvidia-smi не должен остаться жить
         }
 
         // =================================================================== Чистка
