@@ -58,17 +58,39 @@ namespace Pckit
             SizeChanged += (s, e) => Place();
         }
 
+        [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+        [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+        [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+        [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr mon, ref MONITORINFO mi);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+
+        IntPtr gameWindow = IntPtr.Zero, placedOn = IntPtr.Zero;
+
         public void SetCorner(int c) { corner = c; Place(); }
 
+        /// Угол того монитора, где игра (по всему экрану: игра на весь экран, панель задач не учитываем). Всё в пикселях.
         void Place()
         {
-            double w = SystemParameters.PrimaryScreenWidth, h = SystemParameters.PrimaryScreenHeight, m = 12;
-            Left = (corner == 1 || corner == 3) ? w - ActualWidth - m : m;
-            Top = corner >= 2 ? h - ActualHeight - m - 40 : m;
+            var me = new WindowInteropHelper(this).Handle;
+            if (me == IntPtr.Zero) return;
+            var mon = MonitorFromWindow(gameWindow != IntPtr.Zero ? gameWindow : me, 1);   // MONITOR_DEFAULTTOPRIMARY
+            var mi = new MONITORINFO { cbSize = Marshal.SizeOf(typeof(MONITORINFO)) };
+            RECT own;
+            if (!GetMonitorInfo(mon, ref mi) || !GetWindowRect(me, out own)) return;
+            int w = own.R - own.L, h = own.B - own.T, m = 16;
+            int x = (corner == 1 || corner == 3) ? mi.rcMonitor.R - w - m : mi.rcMonitor.L + m;
+            int y = corner >= 2 ? mi.rcMonitor.B - h - m : mi.rcMonitor.T + m;
+            SetWindowPos(me, HWND_TOPMOST, x, y, 0, 0, 0x0001 | 0x0010);   // NOSIZE|NOACTIVATE
+            placedOn = mon;
         }
 
-        public void Update(LiveFps f, MonSample g, double cpu, bool recording, TimeSpan recFor)
+        public void Update(LiveFps f, MonSample g, double cpu, bool recording, TimeSpan recFor, IntPtr game)
         {
+            if (game != gameWindow)
+            {
+                gameWindow = game;
+                if (MonitorFromWindow(game, 1) != placedOn) Place();
+            }
             fps.Text = f.Fps > 0 ? f.Fps.ToString("0", CultureInfo.InvariantCulture) : "—";
             double ratio = f.Fps > 0 ? f.Low1 / f.Fps : 1;
             fps.Foreground = f.Fps <= 0 ? Brushes.White : ratio < 0.4 ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8A, 0x80)) : ratio < 0.6 ? new SolidColorBrush(Color.FromRgb(0xFF, 0xD1, 0x66)) : new SolidColorBrush(Color.FromRgb(0x7C, 0xF0, 0x9A));
@@ -91,9 +113,10 @@ namespace Pckit
             if (hnd != IntPtr.Zero) SetWindowPos(hnd, HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // NOSIZE|NOMOVE|NOACTIVATE: остаться поверх игры
         }
 
-        public void Flash(string text)
+        public void Flash(string text, bool ok)
         {
-            fps.Text = "✓"; fps.Foreground = Brushes.White;
+            fps.Text = ok ? "✓" : "✕";
+            fps.Foreground = ok ? new SolidColorBrush(Color.FromRgb(0x7C, 0xF0, 0x9A)) : new SolidColorBrush(Color.FromRgb(0xFF, 0x8A, 0x80));
             sub.Text = text; hw.Visibility = Visibility.Collapsed; rec.Visibility = Visibility.Collapsed;
         }
     }
@@ -119,14 +142,41 @@ namespace Pckit
 
         static string RunsPath { get { return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Nolagi", "fps-runs.json"); } }
 
-        /// Вызывается после построения окна: горячие клавиши и оверлей, если он был включён.
+        bool hotkeysOn;
+        string hotkeyProblem;   // какие сочетания заняты другой программой
+
+        /// Горячие клавиши занимаются только пока работает замер (оверлей или запись), чтобы не отнимать Ctrl+F11/F12 у других программ.
+        void RegisterFpsHotkeys()
+        {
+            if (hotkeysOn) return;
+            hotkeysOn = true;
+            var h = new WindowInteropHelper(this).Handle;
+            var busy = new List<string>();
+            if (!RegisterHotKey(h, HkOverlay, 0x0002 | 0x4000, 0x7B)) busy.Add("Ctrl+F12");   // без автоповтора
+            if (!RegisterHotKey(h, HkRecord, 0x0002 | 0x4000, 0x7A)) busy.Add("Ctrl+F11");
+            hotkeyProblem = busy.Count == 0 ? null
+                : string.Join(" и ", busy) + (busy.Count > 1 ? " заняты" : " занята") + " другой программой (OBS, Afterburner, Discord и т.п.) — в игре не сработает. Пользуйтесь кнопками здесь или освободите сочетание в той программе.";
+        }
+
+        void UnregisterFpsHotkeys()
+        {
+            if (!hotkeysOn) return;
+            hotkeysOn = false;
+            hotkeyProblem = null;
+            try
+            {
+                var h = new WindowInteropHelper(this).Handle;
+                UnregisterHotKey(h, HkOverlay); UnregisterHotKey(h, HkRecord);
+            }
+            catch { }
+        }
+
+        /// Вызывается после построения окна: обработчик горячих клавиш и оверлей, если он был включён.
         void InitFpsAny()
         {
             try
             {
                 var h = new WindowInteropHelper(this).Handle;
-                RegisterHotKey(h, HkOverlay, 0x0002 | 0x4000, 0x7B);   // Ctrl+F12, без автоповтора
-                RegisterHotKey(h, HkRecord, 0x0002 | 0x4000, 0x7A);    // Ctrl+F11
                 HwndSource.FromHwnd(h).AddHook((IntPtr hw, int msg, IntPtr wp, IntPtr lp, ref bool handled) =>
                 {
                     if (msg == 0x0312)   // WM_HOTKEY
@@ -157,6 +207,7 @@ namespace Pckit
                 anyTimer.Tick += (s, e) => AnyTick();
             }
             anyTimer.Start();
+            RegisterFpsHotkeys();
             return true;
         }
 
@@ -164,7 +215,9 @@ namespace Pckit
         {
             if (tracker == null || cfg.OverlayOn || tracker.Recording) return;
             if (anyTimer != null) anyTimer.Stop();
+            UnregisterFpsHotkeys();
             var t = tracker; tracker = null;
+            // у каждой сессии своё имя, поэтому фоновое закрытие не заденет новую
             System.Threading.Tasks.Task.Run(() => t.Dispose());
         }
 
@@ -193,14 +246,14 @@ namespace Pckit
                 if (run == null || run.Frames < 30)
                 {
                     anyError = "Кадров почти нет. Запись идёт по игре в активном окне: переключитесь в игру после старта записи. Игры в эксклюзивном полноэкранном режиме тоже считаются, а вот видеоплееры и браузер — нет.";
-                    if (fpsOverlay != null) { fpsOverlay.Flash("кадров нет — замер не сохранён"); flashUntil = DateTime.Now.AddSeconds(4); }
+                    if (fpsOverlay != null) { fpsOverlay.Flash("кадров нет — замер не сохранён", false); flashUntil = DateTime.Now.AddSeconds(4); }
                 }
                 else
                 {
                     anyPrev = LoadRuns().FirstOrDefault(r => r.Game.Equals(run.Game, StringComparison.OrdinalIgnoreCase));
                     anyLast = run;
                     SaveRun(run);
-                    if (fpsOverlay != null) { fpsOverlay.Flash("Замер сохранён: " + Math.Round(run.Avg) + " FPS, 1% low " + Math.Round(run.Low1)); flashUntil = DateTime.Now.AddSeconds(5); }
+                    if (fpsOverlay != null) { fpsOverlay.Flash("Замер сохранён: " + Math.Round(run.Avg) + " FPS, 1% low " + Math.Round(run.Low1), true); flashUntil = DateTime.Now.AddSeconds(5); }
                 }
             }
             else
@@ -235,7 +288,7 @@ namespace Pckit
                 gpuLast = Nvml.Read(g) ? g : null;
                 cpuLast = CpuLoad();
             }
-            if (fpsOverlay != null && DateTime.Now > flashUntil) fpsOverlay.Update(live, gpuLast, cpuLast, tracker.Recording, tracker.RecordedFor);
+            if (fpsOverlay != null && DateTime.Now > flashUntil) fpsOverlay.Update(live, gpuLast, cpuLast, tracker.Recording, tracker.RecordedFor, tracker.TargetWindow);
             if (anyLiveText != null && FpsPageOpen)
             {
                 string t = live.Fps > 0 ? "Сейчас: " + live.Game + " — " + live.Fps + " FPS, 1% low " + live.Low1 : "Сейчас: игра не найдена — переключитесь в окно игры.";
@@ -246,12 +299,7 @@ namespace Pckit
 
         void StopFpsAny()
         {
-            try
-            {
-                var h = new WindowInteropHelper(this).Handle;
-                UnregisterHotKey(h, HkOverlay); UnregisterHotKey(h, HkRecord);
-            }
-            catch { }
+            UnregisterFpsHotkeys();
             if (fpsOverlay != null) { fpsOverlay.Close(); fpsOverlay = null; }
             if (anyTimer != null) anyTimer.Stop();
             if (tracker != null) { tracker.Dispose(); tracker = null; }   // синхронно: ETW-сессия не должна остаться после выхода
@@ -305,6 +353,11 @@ namespace Pckit
             var intro = T("Nolagi считает кадры через Windows, как PresentMon: в игру ничего не внедряется, античиты (FACEIT, VAC) это не трогает.", 13.5, "Mut");
             intro.Margin = new Thickness(0, 4, 0, 12);
             c.Children.Add(intro);
+            if (hotkeyProblem != null)
+            {
+                var hk = Note(hotkeyProblem, "Warn", "WarnSoft");
+                c.Children.Add(hk);
+            }
 
             // оверлей
             var ov = new CheckBox { Style = St("Chk"), IsChecked = cfg.OverlayOn };
@@ -328,6 +381,9 @@ namespace Pckit
             recHead.Margin = new Thickness(0, 16, 0, 2);
             c.Children.Add(recHead);
             c.Children.Add(T("Нажмите «Начать запись», переключитесь в игру и играйте 1–3 минуты в одном и том же месте. Остановить — Ctrl+F11 прямо в игре. Сравнивайте замеры до и после настроек.", 13.5, "Mut"));
+            var hkNote = T("Ctrl+F11 и Ctrl+F12 работают, пока включён оверлей или идёт запись — в остальное время Nolagi их не занимает. Если оверлей включён, Ctrl+F11 в игре и начинает, и останавливает запись.", 12, "Mut");
+            hkNote.Margin = new Thickness(0, 6, 0, 0);
+            c.Children.Add(hkNote);
             anyRecBtn = Btn(recOn ? "Остановить запись" : "Начать запись   (Ctrl+F11)", recOn ? "Danger" : "Primary");
             anyRecBtn.HorizontalAlignment = HorizontalAlignment.Left;
             anyRecBtn.Margin = new Thickness(0, 10, 0, 0);

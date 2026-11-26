@@ -507,6 +507,8 @@ function Get-PckitDevRegTargets {
             foreach ($a in $physical) {
                 $id = [string]$a.PnPDeviceID
                 if (-not $id -or $id -notlike 'PCI\*') { continue }
+                # только проводные карты: у части Wi-Fi-драйверов MSI ломает беспроводную сеть
+                if (([string]$a.PhysicalMediaType -match '802\.11|Wireless') -or ([string]$a.NdisPhysicalMedium -eq '9')) { continue }
                 $p = 'HKLM:\SYSTEM\CurrentControlSet\Enum\{0}\Device Parameters' -f $id
                 if ($paths -notcontains $p) { [void]$paths.Add($p) }
             }

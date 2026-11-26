@@ -27,7 +27,11 @@ namespace Pckit
 
     public sealed class FrameTracker : IDisposable
     {
-        const string SessionName = "NolagiFpsTrace";
+        // у каждой сессии своё имя «NolagiFpsTrace_<pid>_<n>»: закрытие старой не задевает новую,
+        // а вторая копия Nolagi не выключает замер первой
+        const string SessionPrefix = "NolagiFpsTrace_";
+        static int sessionCounter;
+        readonly string SessionName = SessionPrefix + Process.GetCurrentProcess().Id + "_" + Interlocked.Increment(ref sessionCounter);
         static readonly Guid DxgiProvider = new Guid("CA11C036-0102-4A2D-A6AD-F03CFED5D3C9");
         static readonly Guid D3d9Provider = new Guid("783ACA0A-790E-4D7F-8451-AA850511C6B9");
         static readonly Guid DxgKrnlProvider = new Guid("802EC45A-1E99-4B83-9920-87C98277BA9D");
@@ -173,13 +177,15 @@ namespace Pckit
         public bool Recording { get { return recording; } }
         public TimeSpan RecordedFor { get { return recording ? DateTime.Now - recStarted : TimeSpan.Zero; } }
         public string LastError = "";
+        /// Окно игры, за которой следим (для оверлея: на каком мониторе её показывать).
+        public IntPtr TargetWindow = IntPtr.Zero;
 
         public bool Start()
         {
             if (running) return true;
             try
             {
-                StopSession();
+                StopStaleSessions();
                 int size = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES)) + (SessionName.Length + 2) * 2;
                 IntPtr p = Marshal.AllocHGlobal(size);
                 try
@@ -305,6 +311,7 @@ namespace Pckit
                 try { using (var p = Process.GetProcessById((int)pid)) name = p.ProcessName; } catch { return; }
                 if (name.Equals("explorer", StringComparison.OrdinalIgnoreCase) || name.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase)
                     || name.Equals("SearchHost", StringComparison.OrdinalIgnoreCase) || name.Equals("StartMenuExperienceHost", StringComparison.OrdinalIgnoreCase)) return;
+                TargetWindow = hwnd;
                 lock (sync)
                 {
                     if (recording && !recNames.ContainsKey(pid)) recNames[pid] = name;
@@ -424,9 +431,48 @@ namespace Pckit
             return run;
         }
 
-        static void StopSession()
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern uint QueryAllTracesW(IntPtr[] props, uint count, out uint found);
+
+        /// Сессии Nolagi, оставшиеся после падения программы (их процесса уже нет), — остановить.
+        static void StopStaleSessions()
         {
-            int size = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES)) + (SessionName.Length + 64) * 2;
+            const int max = 64, nameBytes = 1024 * 2;
+            int head = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES)), size = head + nameBytes * 2;
+            var bufs = new IntPtr[max];
+            try
+            {
+                for (int i = 0; i < max; i++)
+                {
+                    bufs[i] = Marshal.AllocHGlobal(size);
+                    Marshal.Copy(new byte[size], 0, bufs[i], size);
+                    var props = new EVENT_TRACE_PROPERTIES
+                    {
+                        Wnode = new WNODE_HEADER { BufferSize = (uint)size },
+                        LoggerNameOffset = (uint)head, LogFileNameOffset = (uint)(head + nameBytes)
+                    };
+                    Marshal.StructureToPtr(props, bufs[i], false);
+                }
+                uint found;
+                if (QueryAllTracesW(bufs, max, out found) != 0) return;
+                for (int i = 0; i < found && i < max; i++)
+                {
+                    string name = Marshal.PtrToStringUni(bufs[i] + head);
+                    if (name == null || !name.StartsWith(SessionPrefix, StringComparison.Ordinal)) continue;
+                    var parts = name.Substring(SessionPrefix.Length).Split('_');
+                    int pid;
+                    if (parts.Length != 2 || !int.TryParse(parts[0], out pid)) continue;
+                    bool alive = false;
+                    try { using (var p = Process.GetProcessById(pid)) alive = !p.HasExited && p.ProcessName.IndexOf("nolagi", StringComparison.OrdinalIgnoreCase) >= 0; } catch { }
+                    if (!alive) StopSession(name);
+                }
+            }
+            catch { }
+            finally { foreach (var b in bufs) if (b != IntPtr.Zero) Marshal.FreeHGlobal(b); }
+        }
+
+        static void StopSession(string sessionName)
+        {
+            int size = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES)) + (sessionName.Length + 64) * 2;
             IntPtr p = Marshal.AllocHGlobal(size);
             try
             {
@@ -437,7 +483,7 @@ namespace Pckit
                     LoggerNameOffset = (uint)Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES))
                 };
                 Marshal.StructureToPtr(props, p, false);
-                ControlTraceW(0, SessionName, p, EVENT_TRACE_CONTROL_STOP);
+                ControlTraceW(0, sessionName, p, EVENT_TRACE_CONTROL_STOP);
             }
             catch { }
             finally { Marshal.FreeHGlobal(p); }
@@ -447,7 +493,7 @@ namespace Pckit
         {
             running = false; recording = false;
             try { if (trace != INVALID_TRACE_HANDLE && trace != 0) { CloseTrace(trace); trace = INVALID_TRACE_HANDLE; } } catch { }
-            StopSession();
+            StopSession(SessionName);
             session = 0;
             try { if (thread != null) thread.Join(500); } catch { }
             thread = null;
