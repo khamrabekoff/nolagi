@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://khamrabekoff.github.io/nolagi/sitemap.xml
