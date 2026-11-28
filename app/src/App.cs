@@ -1,4 +1,4 @@
-// Nolagi.exe - window and screens. Layout in code, styles in Theme.xaml.
+﻿// Nolagi.exe - window and screens. Layout in code, styles in Theme.xaml.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,7 +19,7 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.4.0";
+        public const string Version = "1.5.0";
 
         [STAThread]
         public static void Main()
@@ -479,6 +479,59 @@ namespace Pckit
             return sp;
         }
 
+        // =================================================================== Отчёт о проблеме
+
+        const string DiagWhat = "В отчёт попадут: какие настройки сейчас включены и что осталось в журнале отката; ошибки видеодрайвера, железа и дисков из журнала Windows за 7 дней; 10-секундный замер задержек драйверов (DPC); память, подкачка, план питания, автозагрузка и запущенные программы-оптимизаторы. Имя пользователя и компьютера вырезаются, файлы и пароли не читаются. Сервер видит ваш IP-адрес.";
+
+        static List<string> StrList(object v)
+        {
+            var l = new List<string>();
+            var en = v as System.Collections.IEnumerable;
+            if (en != null && !(v is string)) foreach (var x in en) if (x != null) l.Add(x.ToString());
+            return l;
+        }
+
+        /// Collects the report under the overlay and sends it. Item1 = report number (0 = failed), Item3 = error text.
+        async Task<Tuple<int, Dictionary<string, object>, string>> CollectAndSendDiag(Overlay ov, string note)
+        {
+            Dictionary<string, object> rep = null;
+            try { rep = J.O(await RunTool("", "diag", null, null, ov), "report"); }
+            catch (Exception ex) { return Tuple.Create(0, rep, "Не удалось собрать отчёт: " + ex.Message); }
+            if (rep == null) return Tuple.Create(0, rep, "Не удалось собрать отчёт.");
+            ov.Step.Text = "Отправляю отчёт автору…"; ov.Counter.Text = "";
+            try { return Tuple.Create(await Telemetry.Diag(note, rep), rep, (string)null); }
+            catch { return Tuple.Create(0, rep, "Не получилось отправить — проверьте интернет и попробуйте ещё раз."); }
+        }
+
+        /// What the user can do right away, from their own report (the author sees the full one).
+        static string DiagAdvice(Dictionary<string, object> rep)
+        {
+            if (rep == null) return "";
+            var tw = J.O(rep, "tweaks");
+            int risky = 0;
+            if (tw != null) risky = J.A(tw, "active").Count(t => J.S(t, "group") == "На свой риск" && J.B(t, "nolagi"));
+            var hints = StrList(J.Get(rep, "hints")).Where(h => !h.StartsWith("Включено «на свой риск»") && !h.StartsWith("В журнале отката")).Take(5).ToList();
+            var sb = new System.Text.StringBuilder();
+            if (risky > 0) sb.Append("Сейчас включено настроек «на свой риск»: " + risky + ". Если фризы появились после Nolagi, начните с них: «Настройки» → вкладка «На свой риск» → отметьте включённые → «Откатить», затем перезагрузите ПК.");
+            if (hints.Count > 0)
+            {
+                if (sb.Length > 0) sb.Append("\n\n");
+                sb.Append("Что ещё заметно:\n• " + string.Join("\n• ", hints.Select(h => h.Length > 180 ? h.Substring(0, 180) + "…" : h)));
+            }
+            return sb.ToString();
+        }
+
+        async Task SendDiagFromCheck()
+        {
+            if (MessageBox.Show(this, "Nolagi соберёт отчёт о состоянии ПК и отправит его автору — так он сможет понять, откуда фризы или ошибки.\n\n" + DiagWhat + "\n\nЗаймёт около минуты. Лучше запускать, когда проблема есть прямо сейчас (игру можно свернуть). Отправить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            var ov = ShowOverlay("Отчёт о проблеме");
+            ov.Step.Text = "Собираю…"; ov.Counter.Text = "";
+            var r = await CollectAndSendDiag(ov, "");
+            string advice = DiagAdvice(r.Item2);
+            if (r.Item1 > 0) ov.Done("Отчёт №" + r.Item1 + " отправлен", new List<Tuple<bool, string, string>>(), "Автор увидит его в своей панели. Если хотите что-то добавить — напишите на вкладке «Написать автору» и укажите номер " + r.Item1 + "." + (advice.Length > 0 ? "\n\n" + advice : ""));
+            else ov.Done("Отчёт не отправлен", new List<Tuple<bool, string, string>> { Tuple.Create(false, r.Item3, "") }, advice);
+        }
+
         // =================================================================== Написать автору
 
         void ShowFeedback()
@@ -492,12 +545,36 @@ namespace Pckit
             var c = new StackPanel();
             c.Children.Add(area);
             var status = new TextBlock { Foreground = Res("Mut"), Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap };
+            var attach = new CheckBox { Style = St("Chk"), Margin = new Thickness(0, 12, 0, 0) };
+            attach.Content = new TextBlock { Text = "Приложить отчёт о проблеме — если есть фризы, вылеты или что-то не откатилось. Около минуты.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 0, 0), FontSize = 13, MaxWidth = 540 };
+            attach.ToolTip = DiagWhat;
             var send = Btn("Отправить", "Primary"); send.HorizontalAlignment = HorizontalAlignment.Left; send.Margin = new Thickness(0, 12, 0, 0);
             send.Click += async (s, e) =>
             {
                 string text = (box.Text ?? "").Trim();
                 if (text.Length < 3) { status.Text = "Напишите хотя бы пару слов."; status.Foreground = Res("Bad"); return; }
                 send.IsEnabled = false; status.Foreground = Res("Mut"); status.Text = "Отправляю…";
+                if (attach.IsChecked == true)
+                {
+                    // отчёт идёт первым, сообщение ссылается на его номер
+                    var ov = ShowOverlay("Отправляю сообщение с отчётом");
+                    ov.Step.Text = "Собираю…"; ov.Counter.Text = "";
+                    var r = await CollectAndSendDiag(ov, text);
+                    if (r.Item1 > 0)
+                    {
+                        try { await Telemetry.Feedback(text, r.Item1); } catch { }
+                        box.Text = ""; attach.IsChecked = false;
+                        status.Foreground = Res("Ok"); status.Text = "✓ Отправлено вместе с отчётом №" + r.Item1 + ". Спасибо!";
+                        ov.Done("Отправлено, отчёт №" + r.Item1, new List<Tuple<bool, string, string>>(), DiagAdvice(r.Item2));
+                    }
+                    else
+                    {
+                        status.Foreground = Res("Bad"); status.Text = r.Item3;
+                        ov.Done("Не отправлено", new List<Tuple<bool, string, string>> { Tuple.Create(false, r.Item3, "") }, "Можно снять галочку «Приложить отчёт» и отправить только сообщение.");
+                    }
+                    send.IsEnabled = true;
+                    return;
+                }
                 try
                 {
                     await Telemetry.Feedback(text);
@@ -506,6 +583,7 @@ namespace Pckit
                 catch { status.Foreground = Res("Bad"); status.Text = "Не получилось отправить — проверьте интернет и попробуйте ещё раз."; }
                 send.IsEnabled = true;
             };
+            c.Children.Add(attach);
             c.Children.Add(send);
             c.Children.Add(status);
             sp.Children.Add(Card(c));
@@ -513,7 +591,7 @@ namespace Pckit
 
             // consent can be changed at any time, not only in the first-run dialog
             var stats = new CheckBox { Style = St("Chk"), IsChecked = cfg.Consent, Margin = new Thickness(4, 18, 0, 0) };
-            stats.Content = new TextBlock { Text = "Отправлять автору статистику: ник, процессор, видеокарту, объём памяти, версию Windows и какие настройки применились. Подробно — в PRIVACY.md на странице программы.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 0, 0), FontSize = 13 };
+            stats.Content = new TextBlock { Text = "Отправлять автору статистику: ник, процессор, видеокарту, объём памяти, версию Windows и какие настройки применились. Подробно — в PRIVACY.md на странице программы.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 0, 0), FontSize = 13, MaxWidth = 580 };
             stats.Click += (s, e) => { cfg.Consent = stats.IsChecked == true; cfg.Save(); };
             sp.Children.Add(stats);
             SetPage(PageFrame("Написать автору", "Сообщение придёт автору Nolagi.", sp));
@@ -772,10 +850,12 @@ namespace Pckit
                 var grp = g;
                 gc.Click += (s, e) =>
                 {
-                    // partly selected -> select all; all selected -> clear (WPF itself would turn «partly» into «none»)
-                    var vis = VisibleEnabled(grp);
-                    bool on = vis.Any(it => it.Check.IsChecked != true);
-                    foreach (var it in vis) it.Check.IsChecked = on;
+                    // partly selected -> select all; all selected -> clear (WPF itself would turn «partly» into «none»).
+                    // «На свой риск» сюда не входит: каждую такую настройку отмечают сами, с подтверждением
+                    var safe = VisibleEnabled(grp).Where(it => !IsRisky(it)).ToList();
+                    bool on = safe.Any(it => it.Check.IsChecked != true);
+                    if (on) foreach (var it in safe) it.Check.IsChecked = true;
+                    else foreach (var it in VisibleEnabled(grp)) it.Check.IsChecked = false;
                     RefreshSelection();
                 };
                 g.Check = gc; g.Count = cnt;
@@ -937,6 +1017,17 @@ namespace Pckit
             var chk = new CheckBox { Style = St("Chk"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) };
             chk.Checked += (s, e) => RefreshSelection();
             chk.Unchecked += (s, e) => RefreshSelection();
+            // «на свой риск»: каждую — только с подтверждением (Click = только щелчок человека, не «Выбрать всё»)
+            if (IsRisky(it))
+                chk.Click += (s, e) =>
+                {
+                    if (chk.IsChecked != true || it.Applied) return;
+                    string rEff = J.S(it.Data, "effect"), rNote = J.S(it.Data, "note");
+                    string msg = "«" + it.Title + "» — настройка на свой риск.\n\n" + (rEff.Length > 0 ? rEff + "\n\n" : "")
+                        + (rNote.Length > 0 ? rNote + "\n\n" : "")
+                        + "Если после неё появятся фризы, зависания или чёрный экран — откатите её. Включайте такие настройки по одной и проверяйте игру после каждой.\n\nОтметить?";
+                    if (MessageBox.Show(this, msg, "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) chk.IsChecked = false;
+                };
             it.Check = chk;
 
             var text = new StackPanel();
@@ -1055,9 +1146,12 @@ namespace Pckit
             foreach (var g in groups)
             {
                 var en = VisibleEnabled(g);
+                var safe = en.Where(i => !IsRisky(i)).ToList();
                 int c = en.Count(i => i.Check.IsChecked == true);
-                g.Check.IsChecked = c == 0 ? (bool?)false : (c == en.Count ? (bool?)true : null);
-                g.Check.IsEnabled = en.Count > 0;
+                int cs = safe.Count(i => i.Check.IsChecked == true);
+                g.Check.IsChecked = c == 0 ? (bool?)false : (safe.Count > 0 && cs == safe.Count && c >= cs ? (bool?)true : null);
+                g.Check.IsEnabled = safe.Count > 0 || c > 0;
+                g.Check.ToolTip = safe.Count == 0 && en.Count > 0 ? "Настройки «на свой риск» отмечаются только по одной" : "Выбрать всё в этой категории (кроме «на свой риск»)";
             }
         }
 
@@ -1070,11 +1164,12 @@ namespace Pckit
         {
             var sel = items.Where(i => i.Check.IsChecked == true && !i.Applied).ToList();
             if (sel.Count == 0) return;
+            // каждую «на свой риск» уже подтвердили при отметке; здесь — только напоминание, если их сразу много
             var risky = sel.Where(IsRisky).ToList();
-            if (risky.Count > 0)
+            if (risky.Count > 1)
             {
                 string list = string.Join("\n", risky.Select(r => "• " + r.Title));
-                if (MessageBox.Show(this, "Среди выбранного есть настройки «на свой риск»:\n\n" + list + "\n\nИх всегда можно откатить. Продолжить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                if (MessageBox.Show(this, "Вы включаете сразу " + risky.Count + " настройки «на свой риск»:\n\n" + list + "\n\nЕсли после этого появятся фризы, будет непонятно, какая из них виновата. Надёжнее включать их по одной. Всё равно применить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             }
             await RunWithOverlay("Применяю настройки", "apply", sel.Select(i => i.Id).ToList());
         }
@@ -1556,8 +1651,23 @@ namespace Pckit
             if (navCheck.IsChecked != true) return;
 
             var outer = new StackPanel();
+            // ---- отчёт о проблеме
+            outer.Children.Add(SectionHead("Фризы, вылеты или что-то не так?", "Отправьте автору отчёт — по нему видно, какие настройки включены, что не откатилось и что пишет Windows.", true));
+            var diagRow = new Grid();
+            diagRow.ColumnDefinitions.Add(new ColumnDefinition());
+            diagRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var dt = new StackPanel { Margin = new Thickness(0, 0, 16, 0) };
+            dt.Children.Add(new TextBlock { Text = "Отчёт о проблеме", FontWeight = FontWeights.SemiBold });
+            dt.Children.Add(new TextBlock { Text = "Около минуты. Лучше запускать, когда проблема есть прямо сейчас. Личные данные не отправляются.", FontSize = 13, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap });
+            dt.ToolTip = DiagWhat;
+            var diagBtn = Btn("Отправить отчёт о проблеме", "Primary"); diagBtn.VerticalAlignment = VerticalAlignment.Center;
+            diagBtn.Click += async (s, e) => await SendDiagFromCheck();
+            Grid.SetColumn(diagBtn, 1);
+            diagRow.Children.Add(dt); diagRow.Children.Add(diagBtn);
+            outer.Children.Add(Section(diagRow));
+
             // ---- что нашёл Nolagi
-            outer.Children.Add(SectionHead("Что нашёл Nolagi", "Сначала то, что стоит исправить. Nolagi ничего не меняет сам — только подсказывает.", true));
+            outer.Children.Add(SectionHead("Что нашёл Nolagi", "Сначала то, что стоит исправить. Nolagi ничего не меняет сам — только подсказывает.", false));
             var order = new Dictionary<string, int> { { "bad", 0 }, { "warn", 1 }, { "info", 2 }, { "ok", 3 } };
             var list = new StackPanel();
             bool first = true;
@@ -1636,6 +1746,15 @@ namespace Pckit
             rep.Children.Add(toolRow("Сеть", "Сброс Winsock, TCP/IP и кэша DNS. Если пропал интернет или не грузятся сайты и лаунчеры.", netBtn));
             outer.Children.Add(Section(rep));
 
+            // ---- BIOS: только перезагрузка в настройки и подсказки, сам Nolagi в BIOS ничего не пишет
+            bool needXmp = found.Any(f => J.S(f, "severity") != "ok" && J.S(f, "title").IndexOf("XMP", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool needRebar = found.Any(f => J.S(f, "severity") != "ok" && J.S(f, "title").IndexOf("Resizable BAR", StringComparison.OrdinalIgnoreCase) >= 0);
+            outer.Children.Add(SectionHead("BIOS", "XMP (частота памяти) и Resizable BAR включаются только в BIOS. Nolagi сам там ничего не меняет — перезагрузит ПК прямо в настройки и подскажет, где что искать.", false));
+            var biosBox = new StackPanel();
+            biosBox.Children.Add(new TextBlock { Text = "Определяю материнскую плату…", Foreground = Res("Mut") });
+            outer.Children.Add(Section(biosBox));
+            LoadBiosBox(biosBox, needXmp, needRebar);
+
             // ---- DNS
             outer.Children.Add(SectionHead("Быстрый DNS", "DNS превращает адрес сайта в IP. Быстрый DNS ускоряет открытие сайтов, Steam и лаунчеров. Пинг в самой игре он не меняет.", false));
             var dnsBox = new StackPanel();
@@ -1646,6 +1765,40 @@ namespace Pckit
 
             var sv = new ScrollViewer { Content = outer, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 8, 0) };
             SetPage(PageFrame("Проверка", "Что мешает играм на этом ПК, ремонт Windows и выбор быстрого DNS.", sv));
+        }
+
+        async void LoadBiosBox(StackPanel box, bool needXmp, bool needRebar)
+        {
+            Dictionary<string, object> b;
+            try { b = J.O(await Bridge.Run("bios-info", null, null), "bios"); }
+            catch (Exception ex) { box.Children.Clear(); box.Children.Add(new TextBlock { Text = "Не удалось определить плату: " + ex.Message, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap }); return; }
+            box.Children.Clear();
+            if (b == null) return;
+            string board = (J.S(b, "maker") + " " + J.S(b, "model")).Trim();
+            box.Children.Add(new TextBlock { Text = "Плата: " + (board.Length > 0 ? board : "не определена") + (J.S(b, "bios").Length > 0 ? " · BIOS " + J.S(b, "bios") : ""), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            Func<string, string, bool, UIElement> tip = (name, path, need) =>
+            {
+                var t = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Margin = new Thickness(0, 6, 0, 0) };
+                t.Inlines.Add(new System.Windows.Documents.Run(name + (need ? " (Nolagi советует включить)" : "") + ": ") { FontWeight = FontWeights.SemiBold, Foreground = need ? Res("Warn") : Res("Txt") });
+                t.Inlines.Add(new System.Windows.Documents.Run(path) { Foreground = Res("Mut") });
+                return t;
+            };
+            box.Children.Add(tip("XMP / EXPO", J.S(b, "xmp"), needXmp));
+            box.Children.Add(tip("Resizable BAR", J.S(b, "rebar"), needRebar));
+            box.Children.Add(new TextBlock { Text = "Сохранить и выйти — F10. Если после XMP ПК не запускается, подождите минуту (плата сама сбросит память) или выключите XMP обратно. " + (J.B(b, "known") ? "" : "Названия пунктов зависят от платы — ориентируйтесь на похожие."), FontSize = 12.5, Foreground = Res("Mut"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
+            var go = Btn("Перезагрузить в BIOS", "Primary"); go.HorizontalAlignment = HorizontalAlignment.Left; go.Margin = new Thickness(0, 10, 0, 0);
+            if (!J.B(b, "uefi"))
+            {
+                go.IsEnabled = false;
+                go.ToolTip = "Этот ПК загружается в режиме Legacy BIOS: перезагрузите его сами и нажимайте " + J.S(b, "key") + " при старте.";
+            }
+            go.Click += async (s, e) =>
+            {
+                if (MessageBox.Show(this, "ПК перезагрузится через 5 секунд и откроет настройки BIOS.\n\nСохраните открытые файлы и закройте игры. Продолжить?", "Nolagi", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                try { await Bridge.Run("bios-restart", null, null); }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "Nolagi", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            };
+            box.Children.Add(go);
         }
 
         async Task RunDnsBench(StackPanel box)
@@ -1855,8 +2008,10 @@ namespace Pckit
                     undoCount = (int)J.N(r, "undoCount");
                     head = "Возвращено: " + J.N(r, "ok") + (J.N(r, "failed") > 0 ? ", не получилось: " + J.N(r, "failed") : "");
                     Telemetry.Send("rollback", new[] { new KeyValuePair<string, bool>("ALL", J.N(r, "failed") == 0) });
+                    // что именно не вернулось — раньше в панель приходило только «откат: ошибка»
+                    if (lines.Count > 0) Telemetry.Error("undoall", string.Join("; ", lines.Select(x => x.Item2 + ": " + x.Item3)));
                 }
-                catch (Exception ex) { head = "Ошибка: " + ex.Message; }
+                catch (Exception ex) { head = "Ошибка: " + ex.Message; Telemetry.Error("undoall", ex.Message); }
                 // state changed everywhere - re-read it
                 try { var st = await Bridge.Run("state", null, null); BuildItems(J.A(st, "actions")); } catch { }
                 ov.Done(head, lines, "Перезагрузите компьютер, чтобы всё вернулось полностью.");

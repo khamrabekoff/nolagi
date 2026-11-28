@@ -319,6 +319,13 @@ try {
             try { Reset-PckitCs2BenchState } catch { $warn = ('Запись консоли включена, но не удалось запомнить конец console.log ({0}) — первый результат может оказаться старым.' -f $_.Exception.Message) }
             Out-Msg @{ t = 'result'; bench = (Get-BenchPayload); warn = $warn }
         }
+        'bios-info' { Out-Msg @{ t = 'result'; bios = (Get-PckitBiosInfo) } }
+        'bios-restart' { Restart-PckitToFirmware; Out-Msg @{ t = 'result'; ok = $true } }
+        'diag' {
+            # отчёт о проблеме: только чтение, отправляет окно
+            $rep = Get-PckitDiagReport -DataDir $dataDir -DpcSeconds 10 -OnStep { param($text) Out-Msg @{ t = 'progress'; i = 0; n = 0; text = $text } }
+            Out-Msg @{ t = 'result'; report = $rep }
+        }
         default { throw "unknown command: $Cmd" }
     }
 } catch {
