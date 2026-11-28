@@ -57,5 +57,8 @@ Check 'BIOS: подсказки есть' ($bi.xmp.Length -gt 10 -and $bi.rebar.
 Check 'BIOS: Gigabyte узнаётся' (@($script:PckitBiosHints | Where-Object { 'Gigabyte Technology Co., Ltd.' -match $_.Match }).Count -eq 1)
 Check 'BIOS: MSI узнаётся' (@($script:PckitBiosHints | Where-Object { 'Micro-Star International Co., Ltd.' -match $_.Match }).Count -eq 1)
 
+# 1.5.1: красный счётчик fps в Dota 2 больше не включается
+Check 'нет cl_showfps в настройках' (-not ([IO.File]::ReadAllText((Join-Path $root 'data\actions.json')) -match 'cl_showfps 1'))
+
 Write-Host ('{0} passed, {1} failed' -f $pass, $fail)
 if ($fail) { exit 1 }

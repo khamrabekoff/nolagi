@@ -119,6 +119,12 @@ try {
             Out-Msg @{ t = 'step'; key = 'gpu'; text = 'Видеокарта и драйвер' }
             Out-Msg @{ t = 'step'; key = 'disk'; text = 'Диски и сеть' }
             Out-Msg @{ t = 'step'; key = 'cs2'; text = 'Steam, CS2 и Dota 2' }
+            # 1.5.1: убрать красный счётчик fps в Dota 2 у тех, кто включал прежнюю настройку
+            try {
+                $dl = New-Object System.Threading.Mutex($false, 'Local\NolagiJournal')
+                try { [void]$dl.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+                try { [void](Remove-PckitDotaFpsCounter) } finally { $dl.ReleaseMutex(); $dl.Dispose() }
+            } catch { }
             $actions = @(Get-PckitActions -Directory $dataDir)
             Out-Msg @{ t = 'step'; key = 'tweaks'; text = 'Текущие настройки Windows' }
             $rows = Get-ActionRows $actions $hw -Progress

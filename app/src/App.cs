@@ -19,7 +19,7 @@ namespace Pckit
 {
     public class App : Application
     {
-        public const string Version = "1.5.0";
+        public const string Version = "1.5.1";
 
         [STAThread]
         public static void Main()

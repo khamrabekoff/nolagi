@@ -297,36 +297,6 @@
     ]
   },
   {
-    "id": "dota.autoexec",
-    "group": "Dota 2",
-    "title": "Dota 2: autoexec со счётчиком fps",
-    "what": "Добавляет в autoexec.cfg Dota 2 блок Nolagi: счётчик fps на экране.",
-    "effect": "Сразу видно, когда проседает fps — проще понять, помогли ли настройки. Только штатная команда игры, VAC это не трогает.",
-    "effectLevel": "низкий",
-    "risk": "low",
-    "needs": "none",
-    "note": "Ваши строки в autoexec.cfg не трогаются: Nolagi пишет только свой блок между отметками. Dota 2 выполняет autoexec.cfg сама при запуске.",
-    "requires": {
-      "dota": true
-    },
-    "steps": [
-      {
-        "type": "cs2cfg",
-        "game": "dota",
-        "lines": [
-          "cl_showfps 1",
-          "echo \"pckit autoexec loaded\""
-        ]
-      }
-    ],
-    "verify": [
-      {
-        "type": "cs2cfg",
-        "game": "dota"
-      }
-    ]
-  },
-  {
     "id": "dota.priority.high",
     "group": "Dota 2",
     "expert": true,
