@@ -248,3 +248,48 @@ function Remove-PckitBloatApp {
         return [pscustomobject]@{ Ok = $false; Message = $_.Exception.Message }
     }
 }
+
+# ---------------------------------------------------------------- BIOS
+
+# Nolagi сам ничего в BIOS не пишет (нет общего интерфейса, а неверная запись может убить плату):
+# только перезагружает в настройки UEFI и подсказывает, где у этой платы XMP и Resizable BAR.
+$script:PckitBiosHints = @(
+    @{ Match = 'ASUS'; Name = 'ASUS'; Key = 'Del или F2'
+        Xmp = 'F7 (Advanced Mode) → Ai Tweaker → Ai Overclock Tuner → XMP I / EXPO / D.O.C.P.'
+        Rebar = 'Advanced → PCI Subsystem Settings → Above 4G Decoding = Enabled, Re-Size BAR Support = Enabled' },
+    @{ Match = 'Micro-Star|MSI'; Name = 'MSI'; Key = 'Del'
+        Xmp = 'OC → Extreme Memory Profile (X.M.P.) или A-XMP / EXPO → Profile 1'
+        Rebar = 'Settings → Advanced → PCI Subsystem Settings → Above 4G memory = Enabled, Re-Size BAR Support = Enabled' },
+    @{ Match = 'Gigabyte'; Name = 'Gigabyte / AORUS'; Key = 'Del'
+        Xmp = 'Tweaker → Extreme Memory Profile (X.M.P.) / EXPO → Profile 1'
+        Rebar = 'Settings → IO Ports → Above 4G Decoding = Enabled, Re-Size BAR Support = Auto' },
+    @{ Match = 'ASRock'; Name = 'ASRock'; Key = 'F2 или Del'
+        Xmp = 'OC Tweaker → DRAM Configuration → Load XMP / EXPO Setting → Profile 1'
+        Rebar = 'Advanced → Chipset Configuration → Above 4G Decoding = Enabled, C.A.M. (Clever Access Memory) = Enabled' },
+    @{ Match = 'Biostar'; Name = 'Biostar'; Key = 'Del'
+        Xmp = 'O.N.E. → Memory → XMP / EXPO Profile'
+        Rebar = 'Advanced → PCIe Configuration → Above 4G Decoding и Re-Size BAR' }
+)
+
+function Get-PckitBiosInfo {
+    $maker = ''; $model = ''; $biosVer = ''
+    try { $b = Get-CimInstance Win32_BaseBoard; $maker = ([string]$b.Manufacturer).Trim(); $model = ([string]$b.Product).Trim() } catch { }
+    try { $bi = Get-CimInstance Win32_BIOS; $biosVer = ('{0} {1}' -f ([string]$bi.SMBIOSBIOSVersion).Trim(), $(if ($bi.ReleaseDate) { ([datetime]$bi.ReleaseDate).ToString('dd.MM.yyyy') } else { '' })).Trim() } catch { }
+    $uefi = ([string]$env:firmware_type -eq 'UEFI')
+    $hint = $script:PckitBiosHints | Where-Object { $maker -match $_.Match } | Select-Object -First 1
+    return [pscustomobject]@{
+        maker = $maker; model = $model; bios = $biosVer; uefi = $uefi
+        known = [bool]$hint
+        name  = $(if ($hint) { $hint.Name } else { $maker })
+        key   = $(if ($hint) { $hint.Key } else { 'Del, F2 или F10' })
+        xmp   = $(if ($hint) { $hint.Xmp } else { 'ищите раздел с названием OC / Tweaker / Memory и пункт XMP, EXPO или DOCP → Profile 1' })
+        rebar = $(if ($hint) { $hint.Rebar } else { 'ищите Above 4G Decoding и Re-Size BAR (у AMD-плат может называться Smart Access Memory) → Enabled' })
+    }
+}
+
+function Restart-PckitToFirmware {
+    # перезагрузка сразу в настройки UEFI; на старых платах (Legacy BIOS) так нельзя
+    if ([string]$env:firmware_type -ne 'UEFI') { throw 'Этот ПК загружается в режиме Legacy BIOS — Windows не умеет перезагрузить его сразу в настройки. Перезагрузите ПК и нажимайте Del или F2 при старте.' }
+    & (Join-Path ([Environment]::SystemDirectory) 'shutdown.exe') /r /fw /t 5 /c 'Nolagi: перезагрузка в настройки BIOS' 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw ('shutdown вернул код {0}' -f $LASTEXITCODE) }
+}

@@ -369,6 +369,22 @@ namespace Pckit
             return Task.Run(() => { WithFallback(b => Post(b + "/api/v1/feedback", json)); });
         }
 
+        /// «Отправить отчёт о проблеме»: explicit action of the user, sent without the stats consent.
+        /// Returns the report number on the server (shown to the user and linked from feedback).
+        public static Task<int> Diag(string note, Dictionary<string, object> report)
+        {
+            string json = J.Write(new Dictionary<string, object> {
+                { "client_id", Cfg.Id }, { "nick", Cfg.Nick }, { "version", App.Version }, { "note", note ?? "" }, { "report", report } });
+            return Task.Run(() => (int)J.N(J.Parse(WithFallback(b => Post(b + "/api/v1/diag", json))), "id"));
+        }
+
+        public static Task Feedback(string text, int diagId)
+        {
+            string json = J.Write(new Dictionary<string, object> {
+                { "client_id", Cfg.Id }, { "nick", Cfg.Nick }, { "version", App.Version }, { "text", text }, { "diag_id", diagId } });
+            return Task.Run(() => { WithFallback(b => Post(b + "/api/v1/feedback", json)); });
+        }
+
         /// New version + announcements. Sends only the version number.
         public static Task<Dictionary<string, object>> CheckUpdate()
         {
