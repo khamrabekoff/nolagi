@@ -322,6 +322,30 @@ function Remove-PckitCfgBlockText {
     return [regex]::Replace($Text, $pattern, '')
 }
 
+
+# 1.5.1: настройку «Dota 2: autoexec со счётчиком fps» убрали — красный счётчик fps (cl_showfps 1) мешал в игре.
+# У тех, кто её уже включил, блок Nolagi в autoexec.cfg Dota 2 убирается сам при запуске программы.
+function Remove-PckitDotaFpsCounter {
+    $j = Read-PckitJournal
+    $has = $false
+    foreach ($e in @($j.cs2)) { if ($e -and [string]$e.act -eq 'dota.autoexec') { $has = $true } }
+    if ($has) {
+        $r = Restore-PckitJournal -Journal $j -Run -ActionId 'dota.autoexec'
+        return [bool]($r.Ok -gt 0)
+    }
+    # блок без записи в журнале (например, откат «Вернуть всё» сорвался): убираем по метке, если в нём счётчик fps
+    $dir = Get-PckitCs2CfgDir -Game 'dota'
+    if (-not $dir) { return $false }
+    $file = Join-Path $dir 'autoexec.cfg'
+    if (-not (Test-Path -LiteralPath $file)) { return $false }
+    $text = [IO.File]::ReadAllText($file)
+    $lines = Get-PckitCfgBlockLines -Text $text
+    if (-not $lines -or -not (@($lines) -contains 'cl_showfps 1')) { return $false }
+    [void](New-PckitFileBackup -Path $file)
+    [IO.File]::WriteAllText($file, (Remove-PckitCfgBlockText -Text $text), (New-Object System.Text.UTF8Encoding($false)))
+    return $true
+}
+
 # откат одной записи: { Status = ok|skip|fail; Message }
 function Restore-PckitCs2Entry {
     param($Entry)
